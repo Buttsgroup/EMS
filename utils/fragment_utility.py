@@ -4,7 +4,9 @@ def get_reduced_H(H_dict):
     reduce_dict = {}
     for key in H_dict.keys():
         if len(H_dict[key]) > 1:
-            reduce_dict[H_dict[key][0]] = H_dict[key]
+            kept_H = H_dict[key][0]
+            reduced_H = H_dict[key][1:]
+            reduce_dict[kept_H] = reduced_H
     return reduce_dict
 
 def get_reduced_H_match():
