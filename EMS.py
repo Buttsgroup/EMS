@@ -1,7 +1,5 @@
 import pandas as pd
 import numpy as np
-from rdkit import Chem
-from rdkit.Chem import AllChem
 from tqdm import tqdm
 
 import glob
@@ -11,23 +9,35 @@ import warnings
 
 from modules.properties.structure_io import from_rdmol, to_rdmol, ase_to_rdmol
 from utils.periodic_table import Get_periodic_table
+from utils.fragment_utility import *
+
+from rdkit import Chem
+from rdkit.Chem import AllChem
+from rdkit.Chem import rdmolops
+from rdkit.Chem import rdmolfiles
+
+from collections import defaultdict
 
 
 class EMS(object):
 
     def __init__(
         self,
-        file,
-        id=None,
-        line_notation=None,
+        file,              # file path
+        mol_id=None,
+        line_notation=None,           # 'smi' or 'smarts'
         read_nmr=False,
         streamlit=False,
         fragment=False,
     ):
+
+        # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
+        # if the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
+        # if the molecule file is neither SMILES/SMARTS string or streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are the same, i.e. the file path
         if line_notation:
             self.id = file
         else:
-            self.id = id
+            self.id = mol_id
         if streamlit and not line_notation:
             self.filename = file.name
         else:
@@ -39,66 +49,43 @@ class EMS(object):
             self.stringfile = StringIO(file.getvalue().decode("utf-8"))
         else:
             self.stringfile = file
+
+        # initialize the molecular structure and properties as empty
         self.type = None
         self.xyz = None
-        self.conn = None
-        self.path_topology = None
-        self.path_distance = None
+        self.conn = None                   # self.conn is the bond order matrix of the molecule
+        self.adj = None                    # self.adj is the adjacency matrix of the molecule
+        self.path_topology = None          # Path length between atoms
+        self.path_distance = None          # 3D distance between atoms
         self.atom_properties = {}
         self.pair_properties = {}
         self.mol_properties = {}
         self.flat = False
         self.streamlit = streamlit
+        self.fragment = fragment
 
-        if fragment:
-            print("Work In Progress")
+        # get the rdmol object from the file
+        if line_notation:
+            if line_notation == "smi":
+                self.rdmol = Chem.MolFromSmiles(file)
+                self.rdmol = Chem.AddHs(self.rdmol)
+                AllChem.EmbedMolecule(self.rdmol)              # obtain initial coordinates for a molecule
+            elif line_notation == "smarts":
+                self.rdmol = Chem.MolFromSmarts(file)
+            else:
+                raise ValueError(f"Line notation, {line_notation}, not supported")
 
         else:
-            if line_notation:
-                if line_notation == "smi":
-                    self.rdmol = Chem.MolFromSmiles(file)
-                    self.rdmol = Chem.AddHs(self.rdmol)
-                    AllChem.EmbedMolecule(self.rdmol)
-                elif line_notation == "smarts":
-                    self.rdmol = Chem.MolFromSmarts(file)
-                else:
-                    raise ValueError(f"Line notation, {line_notation}, not supported")
+            ftype = self.filename.split(".")[-1]
 
-            else:
-                ftype = self.filename.split(".")[-1]
-
-                if ftype == "sdf":
-                    if not self.check_z_ords():
-                        self.flat = True
-                        warnings.warn(
-                            f"Warning: {self.id} - All Z coordinates are 0 - Flat flag set to True"
-                        )
-                    if streamlit:
-                        for mol in Chem.ForwardSDMolSupplier(
-                            self.file, removeHs=False, sanitize=False
-                        ):
-                            if mol is not None:
-                                if mol.GetProp("_Name") is None:
-                                    mol.SetProp("_Name", self.id)
-                                self.rdmol = mol
-                    else:
-                        for mol in Chem.SDMolSupplier(
-                            self.file, removeHs=False, sanitize=False
-                        ):
-                            if mol is not None:
-                                if mol.GetProp("_Name") is None:
-                                    mol.SetProp("_Name", self.id)
-                                self.rdmol = mol
-                elif ftype == "xyz":
-                    self.rdmol = Chem.MolFromXYZFile(self.path)
-
-                elif ftype == "mol2":
-                    self.rdmol = Chem.MolFromMol2File(
-                        self.file, removeHs=False, sanitize=False
+            if ftype == "sdf":
+                if not self.check_z_ords():
+                    self.flat = True
+                    warnings.warn(
+                        f"Warning: {self.id} - All Z coordinates are 0 - Flat flag set to True"
                     )
-
-                elif ftype == "mae":
-                    for mol in Chem.MaeMolSupplier(
+                if streamlit:
+                    for mol in Chem.ForwardSDMolSupplier(
                         self.file, removeHs=False, sanitize=False
                     ):
                         if mol is not None:
@@ -106,21 +93,61 @@ class EMS(object):
                                 mol.SetProp("_Name", self.id)
                             self.rdmol = mol
 
-                elif ftype == "pdb":
-                    self.rdmol = Chem.MolFromPDBFile(
-                        self.file, removeHs=False, sanitize=False
-                    )
-
-                elif ftype == "ase":
-                    self.rdmol = ase_to_rdmol(self.file)
-
                 else:
-                    raise ValueError(f"File type, {ftype} not supported")
+                    for mol in Chem.SDMolSupplier(
+                        self.file, removeHs=False, sanitize=False
+                    ):
+                        if mol is not None:
+                            if mol.GetProp("_Name") is None:
+                                mol.SetProp("_Name", self.id)
+                            self.rdmol = mol
+            elif ftype == "xyz":
+                self.rdmol = Chem.MolFromXYZFile(self.path)
 
-            self.type, self.xyz, self.conn = from_rdmol(self.rdmol)
-            self.path_topology, self.path_distance = self.get_graph_distance()
+            elif ftype == "mol2":
+                self.rdmol = Chem.MolFromMol2File(
+                    self.file, removeHs=False, sanitize=False
+                )
+
+            elif ftype == "mae":
+                for mol in Chem.MaeMolSupplier(
+                    self.file, removeHs=False, sanitize=False
+                ):
+                    if mol is not None:
+                        if mol.GetProp("_Name") is None:
+                            mol.SetProp("_Name", self.id)
+                        self.rdmol = mol
+
+            elif ftype == "pdb":
+                self.rdmol = Chem.MolFromPDBFile(
+                    self.file, removeHs=False, sanitize=False
+                )
+                
+            elif ftype == "ase":
+                    self.rdmol = ase_to_rdmol(self.file)
+                
+            else:
+                raise ValueError(f"File type, {ftype} not supported")
+
+        # get the molecular structure and properties
+        self.type, self.xyz, self.conn = from_rdmol(self.rdmol)         # self.conn is the bond order matrix of the molecule
+        self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
+        self.path_topology, self.path_distance = self.get_graph_distance()
+        self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
+        self.symmetric = self.check_symmetric()
+
+        # enter the fragment mode of EMS, to generate molecular fragments
+        if self.fragment:
+            self.edge_index = binary_matrix_to_index(self.adj)
+            self.H_index = self.get_hydrogen_indexes()                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
+            self.H_to_reduce = get_reduced_H(self.H_index)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
+            self.H_match = None
+
+
+
+        # enter the normal mode of EMS
+        else:
             self.get_coupling_types()
-            self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
 
             if read_nmr:
                 try:
@@ -137,7 +164,7 @@ class EMS(object):
                     )
 
     def __str__(self):
-        print(f"EMS({self.id}), {self.mol_properties['SMILES']}")
+        return f"EMS({self.id}), {self.mol_properties['SMILES']}"
 
     def __repr__(self):
         return (
@@ -175,6 +202,15 @@ class EMS(object):
                         if z_coord != 0:
                             return False
                 return True
+
+    def check_symmetric(self):
+        mol = Chem.rdmolops.RemoveAllHs(self.rdmol)
+        canonical_ranking = list(rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))
+        
+        if len(canonical_ranking) == len(set(canonical_ranking)):
+            return False
+        else:
+            return True
 
     def nmr_read(self):
         if self.streamlit:
@@ -311,6 +347,15 @@ class EMS(object):
 
     def get_graph_distance(self):
         return Chem.GetDistanceMatrix(self.rdmol), Chem.Get3DDistanceMatrix(self.rdmol)
+
+    def get_hydrogen_indexes(self):
+        hydrogen_indexes = defaultdict(list)
+        for atom in self.rdmol.GetAtoms():
+            for neighbor in atom.GetNeighbors():
+                if neighbor.GetAtomicNum() == 1:
+                    hydrogen_indexes[atom.GetIdx()].append(neighbor.GetIdx())
+
+        return hydrogen_indexes
 
     def get_coupling_types(self) -> None:
         """
@@ -482,3 +527,24 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
         pairs.to_pickle(f"{write}/pairs.pkl")
     else:
         return pairs
+
+
+
+
+
+
+file_dir = './tests/test_mols/'
+file = 'testmol_1_NMR.nmredata.sdf'
+path = file_dir + file
+
+mol = EMS(path, mol_id = file, fragment = True)
+print(mol.type)
+print(mol.xyz[:, 0].shape)
+print(mol.symmetric)
+print(mol.H_index)
+print(mol.H_to_reduce)
+
+# for i in range(len(mol.adj)):
+#     print(mol.adj[i])
+#     print(mol.conn[i])
+#     print('\n')
