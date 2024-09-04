@@ -7,7 +7,7 @@ import re
 from io import StringIO
 import warnings
 
-from modules.properties.structure_io import from_rdmol, to_rdmol, ase_to_rdmol
+from modules.properties.structure_io import from_rdmol, to_rdmol
 from utils.periodic_table import Get_periodic_table
 from utils.fragment_utility import *
 
