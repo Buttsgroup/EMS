@@ -1,6 +1,6 @@
 import numpy as np
 
-def get_reduced_H(H_dict):
+def get_reduced_H_dict(H_dict):
     reduce_dict = {}
     for key in H_dict.keys():
         if len(H_dict[key]) > 1:
@@ -9,8 +9,12 @@ def get_reduced_H(H_dict):
             reduce_dict[kept_H] = reduced_H
     return reduce_dict
 
-def get_reduced_H_match():
-    pass
+def get_reduced_H_list(H_dict):
+    reduced_H_list = []
+    for key, value in H_dict.items():
+        for item in value:
+            reduced_H_list.append(item)
+    return reduced_H_list
 
 def binary_matrix_to_list(mat):
     pass

@@ -29,6 +29,7 @@ class EMS(object):
         read_nmr=False,
         streamlit=False,
         fragment=False,
+        max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
 
         # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
@@ -61,6 +62,7 @@ class EMS(object):
         self.pair_properties = {}
         self.mol_properties = {}
         self.flat = False
+        self.max_atoms = max_atoms
         self.streamlit = streamlit
         self.fragment = fragment
 
@@ -139,10 +141,10 @@ class EMS(object):
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
             self.edge_index = binary_matrix_to_index(self.adj)
-            self.H_index = self.get_hydrogen_indexes()                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
-            self.H_to_reduce = get_reduced_H(self.H_index)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
-            self.H_match = None
-
+            self.H_index_dict = self.get_hydrogen_indexes()                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
+            self.reduced_H_dict = get_reduced_H_dict(self.H_index_dict)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
+            self.reduced_H_list = get_reduced_H_list(self.reduced_H_dict)            # a list of H atoms to be reduced
+            
 
 
         # enter the normal mode of EMS
@@ -541,8 +543,9 @@ mol = EMS(path, mol_id = file, fragment = True)
 print(mol.type)
 print(mol.xyz[:, 0].shape)
 print(mol.symmetric)
-print(mol.H_index)
-print(mol.H_to_reduce)
+print(mol.H_index_dict)
+print(mol.reduced_H_dict)
+print(mol.reduced_H_list)
 
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])
