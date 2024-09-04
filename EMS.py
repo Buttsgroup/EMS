@@ -9,7 +9,7 @@ import re
 from io import StringIO
 import warnings
 
-from modules.properties.structure_io import from_rdmol, to_rdmol
+from modules.properties.structure_io import from_rdmol, to_rdmol, ase_to_rdmol
 from utils.periodic_table import Get_periodic_table
 
 
@@ -110,6 +110,10 @@ class EMS(object):
                     self.rdmol = Chem.MolFromPDBFile(
                         self.file, removeHs=False, sanitize=False
                     )
+
+                elif ftype == "ase":
+                    self.rdmol = ase_to_rdmol(self.file)
+
                 else:
                     raise ValueError(f"File type, {ftype} not supported")
 
