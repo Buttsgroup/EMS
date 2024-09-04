@@ -8,7 +8,7 @@ def get_reduced_H(H_dict):
     return reduce_dict
 
 def get_reduced_H_match():
-    
+    pass
 
 def binary_matrix_to_list(mat):
     pass
