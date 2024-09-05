@@ -16,7 +16,6 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
 
-from collections import defaultdict
 
 
 class EMS(object):
@@ -145,15 +144,18 @@ class EMS(object):
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
             self.edge_index = binary_matrix_to_index(self.adj)
-            self.H_index_dict = self.get_hydrogen_indexes()                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
+            self.H_index_dict = get_hydrogen_indexes(self.rdmol)                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
             self.reduced_H_dict = get_reduced_H_dict(self.H_index_dict)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
             self.reduced_H_list = get_reduced_H_list(self.reduced_H_dict)            # a list of H atoms to be reduced
             self.eff_atom_list = list(set(range(len(self.type))) - set(self.reduced_H_list))         # a list of effective atoms that excludes the reduced H atoms
             self.dumb_atom_list = list(set(range(self.max_atoms)) - set(self.eff_atom_list))         # a list of dumb atoms that excludes the effective atoms
 
-            self.reduced_edge_index = self.edge_index[np.all(~np.isin(self.edge_index, self.reduced_H_list), axis = 1)]         # reduced edge index that excludes the bonds with reduced H atoms
-            self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # reduced adjacency matrix that excludes the bonds with reduced H atoms
-            self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # reduced connectivity matrix that excludes the bonds with reduced H atoms
+            self.reduced_edge_index = self.edge_index[np.all(~np.isin(self.edge_index, self.reduced_H_list), axis = 1)]         # edge index that excludes the bonds with reduced H atoms
+            self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # adjacency matrix that excludes the bonds with reduced H atoms
+            self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # connectivity matrix that excludes the bonds with reduced H atoms
+
+
+
 
 
         # enter the normal mode of EMS
@@ -358,15 +360,6 @@ class EMS(object):
 
     def get_graph_distance(self):
         return Chem.GetDistanceMatrix(self.rdmol), Chem.Get3DDistanceMatrix(self.rdmol)
-
-    def get_hydrogen_indexes(self):
-        hydrogen_indexes = defaultdict(list)
-        for atom in self.rdmol.GetAtoms():
-            for neighbor in atom.GetNeighbors():
-                if neighbor.GetAtomicNum() == 1:
-                    hydrogen_indexes[atom.GetIdx()].append(neighbor.GetIdx())
-
-        return hydrogen_indexes
 
     def get_coupling_types(self) -> None:
         """

@@ -1,6 +1,28 @@
 import numpy as np
+from collections import defaultdict
+
+
+def binary_matrix_to_index(mat):
+    return np.transpose(np.nonzero(mat))
+
+def get_hydrogen_indexes(rdmol):
+    hydrogen_indexes = defaultdict(list)
+    for atom in rdmol.GetAtoms():
+        for neighbor in atom.GetNeighbors():
+            if neighbor.GetAtomicNum() == 1:
+                hydrogen_indexes[atom.GetIdx()].append(neighbor.GetIdx())
+
+    return hydrogen_indexes
 
 def get_reduced_H_dict(H_dict):
+    '''
+    
+
+
+
+    '''
+
+
     reduce_dict = {}
     for key in H_dict.keys():
         if len(H_dict[key]) > 1:
@@ -18,9 +40,6 @@ def get_reduced_H_list(H_dict):
 
 def binary_matrix_to_list(mat):
     pass
-
-def binary_matrix_to_index(mat):
-    return np.transpose(np.nonzero(mat))
 
 def get_reduced_adj_mat(mat, reduced_index):
     mat = mat.copy()
