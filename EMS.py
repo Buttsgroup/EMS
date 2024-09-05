@@ -136,7 +136,7 @@ class EMS(object):
         self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
-        self.symmetric = self.check_symmetric()
+        self.symmetric = self.check_symmetric()                         # check if the non-hydrogen backbone of the molecule is symmetric
 
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
@@ -146,6 +146,9 @@ class EMS(object):
             self.reduced_H_list = get_reduced_H_list(self.reduced_H_dict)            # a list of H atoms to be reduced
             self.eff_atom_list = list(set(range(len(self.type))) - set(self.reduced_H_list))         # a list of effective atoms that excludes the reduced H atoms
             self.dumb_atom_list = list(set(range(self.max_atoms)) - set(self.eff_atom_list))         # a list of dumb atoms that excludes the effective atoms
+
+            self.reduced_edge_index = self.edge_index[np.all(~np.isin(self.edge_index, self.reduced_H_list), axis = 1)]         # reduced edge index that excludes the bonds with reduced H atoms
+            
 
 
         # enter the normal mode of EMS
@@ -549,6 +552,8 @@ print(mol.reduced_H_dict)
 print(mol.reduced_H_list)
 print(mol.eff_atom_list)
 print(mol.dumb_atom_list)
+print(mol.edge_index)
+print(mol.reduced_edge_index)
 
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])
