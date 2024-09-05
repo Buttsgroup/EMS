@@ -148,8 +148,9 @@ class EMS(object):
             self.dumb_atom_list = list(set(range(self.max_atoms)) - set(self.eff_atom_list))         # a list of dumb atoms that excludes the effective atoms
 
             self.reduced_edge_index = self.edge_index[np.all(~np.isin(self.edge_index, self.reduced_H_list), axis = 1)]         # reduced edge index that excludes the bonds with reduced H atoms
+            self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # reduced adjacency matrix that excludes the bonds with reduced H atoms
+            self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # reduced connectivity matrix that excludes the bonds with reduced H atoms
             
-
 
         # enter the normal mode of EMS
         else:
@@ -552,8 +553,8 @@ print(mol.reduced_H_dict)
 print(mol.reduced_H_list)
 print(mol.eff_atom_list)
 print(mol.dumb_atom_list)
-print(mol.edge_index)
-print(mol.reduced_edge_index)
+print(mol.reduced_adj[:, 17])
+print(mol.adj[:, 17])
 
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])

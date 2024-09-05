@@ -21,3 +21,10 @@ def binary_matrix_to_list(mat):
 
 def binary_matrix_to_index(mat):
     return np.transpose(np.nonzero(mat))
+
+def get_reduced_adj_mat(mat, reduced_index):
+    mat = mat.copy()
+    for row in reduced_index:
+        mat[row, :] = 0
+        mat[:, row] = 0
+    return mat
