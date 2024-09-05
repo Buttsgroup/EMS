@@ -144,7 +144,8 @@ class EMS(object):
             self.H_index_dict = self.get_hydrogen_indexes()                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
             self.reduced_H_dict = get_reduced_H_dict(self.H_index_dict)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
             self.reduced_H_list = get_reduced_H_list(self.reduced_H_dict)            # a list of H atoms to be reduced
-            
+            self.eff_atom_list = list(set(range(len(self.type))) - set(self.reduced_H_list))         # a list of effective atoms that excludes the reduced H atoms
+            self.dumb_atom_list = list(set(range(self.max_atoms)) - set(self.eff_atom_list))         # a list of dumb atoms that excludes the effective atoms
 
 
         # enter the normal mode of EMS
@@ -546,6 +547,8 @@ print(mol.symmetric)
 print(mol.H_index_dict)
 print(mol.reduced_H_dict)
 print(mol.reduced_H_list)
+print(mol.eff_atom_list)
+print(mol.dumb_atom_list)
 
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])
