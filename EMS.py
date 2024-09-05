@@ -9,7 +9,7 @@ import warnings
 
 from modules.properties.structure_io import from_rdmol, to_rdmol
 from utils.periodic_table import Get_periodic_table
-from utils.fragment_utility import *
+from modules.fragment.reduce_hydrogen import *
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -545,7 +545,7 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
 
 
 file_dir = './tests/test_mols/'
-file = 'testmol_4_NMR.nmredata.sdf'
+file = 'testmol_1_NMR.nmredata.sdf'
 path = file_dir + file
 
 mol = EMS(path, mol_id = file, fragment = True)
