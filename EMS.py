@@ -138,6 +138,10 @@ class EMS(object):
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
         self.symmetric = self.check_symmetric()                         # check if the non-hydrogen backbone of the molecule is symmetric
 
+        # raise an error if the number of atoms in the molecule is greater than the maximum number of atoms allowed
+        if self.max_atoms < len(self.type):
+            raise ValueError(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
+
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
             self.edge_index = binary_matrix_to_index(self.adj)
@@ -150,7 +154,7 @@ class EMS(object):
             self.reduced_edge_index = self.edge_index[np.all(~np.isin(self.edge_index, self.reduced_H_list), axis = 1)]         # reduced edge index that excludes the bonds with reduced H atoms
             self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # reduced adjacency matrix that excludes the bonds with reduced H atoms
             self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # reduced connectivity matrix that excludes the bonds with reduced H atoms
-            
+
 
         # enter the normal mode of EMS
         else:
@@ -541,7 +545,7 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
 
 
 file_dir = './tests/test_mols/'
-file = 'testmol_1_NMR.nmredata.sdf'
+file = 'testmol_4_NMR.nmredata.sdf'
 path = file_dir + file
 
 mol = EMS(path, mol_id = file, fragment = True)
@@ -553,8 +557,9 @@ print(mol.reduced_H_dict)
 print(mol.reduced_H_list)
 print(mol.eff_atom_list)
 print(mol.dumb_atom_list)
-print(mol.reduced_adj[:, 17])
-print(mol.adj[:, 17])
+# print(mol.reduced_conn[:, 47])
+# print(mol.conn[:, 47])
+print(len(mol.type))
 
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])
