@@ -39,7 +39,7 @@ print(mol.dumb_atom_list)
 # print(mol.reduced_conn[:, 47])
 # print(mol.conn[:, 47])
 print(mol.mol_properties["SMILES"])
-print(mol.atom_properties['shift'])
+print(mol.atom_properties['atom_type'])
 
 
 # for i in range(len(mol.adj)):

@@ -193,13 +193,13 @@ def average_atom_prop(prop: np.ndarray, reduced_H_dict: dict[int, list[int]], le
         The key of the dictionary is the index of the hydrogen atom kept, and the value is a list of the indexes of its equivalent hydrogen atoms deleted.
 
     length : int
-        The maximum numer of atoms in the molecule.
+        The maximum number of atoms in the molecule.
     
     Returns
     -------
     extended_prop: np.ndarray
-        The extended property array of the atoms in the molecule. The properties of the deleted hydrogen atoms and dumb atoms are masked as 0.
-        The shape of the matrix should be (length,).
+        The extended property array of the atoms in the molecule, with averaged properties of equivalent hydrogen atoms. 
+        The properties of the deleted hydrogen atoms and dumb atoms are masked as 0. The shape of the matrix should be (length,).
 
     Examples
     --------
@@ -220,5 +220,45 @@ def average_atom_prop(prop: np.ndarray, reduced_H_dict: dict[int, list[int]], le
             prop[i] = 0
         
     extended_prop = np.pad(prop, (0, length - len(prop)), 'constant', constant_values = 0)
+    return extended_prop
 
+
+def reduce_atom_prop(prop: np.ndarray, reduced_H_list: list[int], length: int) -> np.ndarray:
+    '''
+    Set the properties of the deleted hydrogen atoms in a molecule as 0. 
+    The property array will be extended to the maximum length. The properties of dumb atoms will be set as 0.
+
+    Parameters
+    ----------
+    prop : np.ndarray
+        The 1D property array of the atoms in the molecule. The shape of the matrix should be (n_atoms,).
+
+    reduced_H_list : list[int]
+        A list of the indexes of the hydrogen atoms deleted in the molecule.
+
+    length : int
+        The maximum number of atoms in the molecule.
+    
+    Returns
+    -------
+    extended_prop: np.ndarray
+        The extended property array of the atoms in the molecule. The properties of the deleted hydrogen atoms and dumb atoms are masked as 0.
+        The shape of the matrix should be (length,).
+    
+    Examples
+    --------
+    >>> prop = np.array([1, 2, 3, 4, 5, 6, 7, 8])
+    >>> reduced_H_list = [3, 4, 6, 7]
+    >>> length = 10
+    >>> reduce_atom_prop(prop, reduced_H_list, length)
+    array([1, 2, 3, 0, 0, 6, 0, 0, 0, 0])
+    '''
+
+    prop = prop.copy()
+    reduced_H_list = reduced_H_list.copy()
+
+    for i in reduced_H_list:
+        prop[i] = 0
+    
+    extended_prop = np.pad(prop, (0, length - len(prop)), 'constant', constant_values = 0)
     return extended_prop
