@@ -144,9 +144,12 @@ class EMS(object):
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
             self.edge_index = matrix_to_edge_index(self.adj)
-            self.H_index_dict = get_hydrogen_indexes(self.rdmol)                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
-            self.reduced_H_dict = get_reduced_H_dict(self.H_index_dict)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
-            self.reduced_H_list = get_reduced_H_list(self.reduced_H_dict)            # a list of H atoms to be reduced
+
+            # self.H_index_dict: a dictionary, key is the non-hydrogen atom index, value is a list of hydrogen atom indexes linked to this non-hydrogen atom
+            # self.reduced_H_dict: a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes to be deleted
+            # self.reduced_H_list: a list of all H atoms to be reduced
+            self.H_index_dict, self.reduced_H_dict, self.reduced_H_list = hydrogen_reduction(self.rdmol) 
+
             self.eff_atom_list = list(set(range(len(self.type))) - set(self.reduced_H_list))         # a list of effective atoms that excludes the reduced H atoms
             self.dumb_atom_list = list(set(range(self.max_atoms)) - set(self.eff_atom_list))         # a list of dumb atoms that excludes the effective atoms
 
