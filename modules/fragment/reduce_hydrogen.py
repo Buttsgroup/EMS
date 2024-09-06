@@ -96,48 +96,40 @@ def hydrogen_reduction(rdmol: object):
     return hydrogen_indexes, reduced_H_dict, reduced_H_list
 
 
-
-
-# def get_hydrogen_indexes(rdmol: Chem.rdchem.Mol):
-#     hydrogen_indexes = defaultdict(list)
-#     for atom in rdmol.GetAtoms():
-#         for neighbor in atom.GetNeighbors():
-#             if neighbor.GetAtomicNum() == 1:
-#                 hydrogen_indexes[atom.GetIdx()].append(neighbor.GetIdx())
-
-    
-    
-
-# def get_reduced_H_dict(H_dict):
-#     '''
-    
-
-
-
-#     '''
-
-
-#     reduce_dict = {}
-#     for key in H_dict.keys():
-#         if len(H_dict[key]) > 1:
-#             kept_H = H_dict[key][0]
-#             reduced_H = H_dict[key][1:]
-#             reduce_dict[kept_H] = reduced_H
-#     return reduce_dict
-
-# def get_reduced_H_list(H_dict):
-#     reduced_H_list = []
-#     for key, value in H_dict.items():
-#         for item in value:
-#             reduced_H_list.append(item)
-#     return reduced_H_list
-
-def binary_matrix_to_list(mat):
-    pass
-
 def get_reduced_adj_mat(mat, reduced_index):
-    mat = mat.copy()
+    '''
+    Mask some rows and columns of the adjacency or connectivity matrix of a molecule as 0 based on the indexes of hydrogen atoms that are deleted.
+
+    Parameters
+    ----------
+    mat : np.ndarray
+        The original adjacency or connectivity matrix of a molecule. The shape of the matrix should be (n_atoms, n_atoms).
+    
+    reduced_index : list[int]
+        The indexes of the hydrogen atoms that are deleted in the molecule.
+
+    Returns
+    -------
+    reduced_mat: np.ndarray
+        The reduced adjacency or connectivity matrix of the molecule, with rows and columns of deleted hydrogen atoms masked as 0. 
+        The shape of the matrix should be (n_atoms, n_atoms).
+    
+    Examples
+    --------
+    >>> mat = np.array([[0, 1, 0, 0],
+    ...                 [1, 0, 1, 0],
+    ...                 [0, 1, 0, 1],
+    ...                 [0, 0, 1, 0]])
+    >>> reduced_index = [0, 2]
+    >>> get_reduced_adj_mat(mat, reduced_index)
+    array([[0, 0, 0, 0],
+           [0, 0, 1, 0],
+           [0, 1, 0, 0],
+           [0, 0, 0, 0]])
+    '''
+
+    reduced_mat = mat.copy()
     for row in reduced_index:
-        mat[row, :] = 0
-        mat[:, row] = 0
-    return mat
+        reduced_mat[row, :] = 0
+        reduced_mat[:, row] = 0
+    return reduced_mat
