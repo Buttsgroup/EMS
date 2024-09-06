@@ -9,9 +9,27 @@ def matrix_to_edge_index(mat: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     mat : np.ndarray
-        The adjacency matrix of a molecule.
+        The adjacency matrix of a molecule. The shape of the matrix should be (n_atoms, n_atoms).
+    
+    Returns
+    -------
+    np.ndarray
+        The edge index of the molecule. The shape of the matrix should be (n_edges, 2). 
+        Each row of the matrix represents an edge (source atom index, destination atom index) in the molecule.
 
-
+    Examples
+    --------
+    >>> mat = np.array([[0, 1, 0, 0],
+    ...                 [1, 0, 1, 0],
+    ...                 [0, 1, 0, 1],
+    ...                 [0, 0, 1, 0]])
+    >>> matrix_to_edge_index(mat)
+    array([[0, 1],
+           [1, 0],
+           [1, 2],
+           [2, 1],
+           [2, 3],
+           [3, 2]])
     '''
 
     return np.transpose(np.nonzero(mat))
