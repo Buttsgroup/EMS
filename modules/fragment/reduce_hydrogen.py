@@ -2,7 +2,18 @@ import numpy as np
 from collections import defaultdict
 
 
-def binary_matrix_to_index(mat):
+def matrix_to_edge_index(mat: np.ndarray) -> np.ndarray:
+    '''
+    Generate the edge index of a molecule from its adjacency matrix.
+
+    Parameters
+    ----------
+    mat : np.ndarray
+        The adjacency matrix of a molecule.
+
+
+    '''
+
     return np.transpose(np.nonzero(mat))
 
 def get_hydrogen_indexes(rdmol):

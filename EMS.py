@@ -143,7 +143,7 @@ class EMS(object):
 
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
-            self.edge_index = binary_matrix_to_index(self.adj)
+            self.edge_index = matrix_to_edge_index(self.adj)
             self.H_index_dict = get_hydrogen_indexes(self.rdmol)                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
             self.reduced_H_dict = get_reduced_H_dict(self.H_index_dict)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
             self.reduced_H_list = get_reduced_H_list(self.reduced_H_dict)            # a list of H atoms to be reduced
