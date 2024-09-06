@@ -96,6 +96,49 @@ def hydrogen_reduction(rdmol: object):
     return hydrogen_indexes, reduced_H_dict, reduced_H_list
 
 
+def get_reduced_edge_index(edge_index, reduced_index):
+    '''
+    Delete the edges that are connected to the deleted hydrogen atoms in a molecule.
+
+    Parameters
+    ----------
+    edge_index : np.ndarray
+        The edge index of the molecule. The shape of the matrix should be (n_edges, 2). 
+        Each row of the matrix represents an edge (source atom index, destination atom index) in the molecule.
+
+    reduced_index : list[int]
+        The indexes of the hydrogen atoms that are deleted in the molecule.
+
+    Returns
+    -------
+    reduced_edge_index: np.ndarray
+        The reduced edge index of the molecule, with edges connected to the deleted hydrogen atoms removed. 
+        The shape of the matrix should be (n_edges - n_removed_edges, 2).
+
+    Examples
+    --------
+    >>> edge_index = np.array([[0, 1],
+    ...                        [1, 0],
+    ...                        [0, 2],
+    ...                        [2, 0],
+    ...                        [0, 3],
+    ...                        [3, 0],
+    ...                        [0, 4],
+    ...                        [4, 0]])
+    >>> reduced_index = [1, 3]
+    >>> get_reduced_edge_index(edge_index, reduced_index)
+    array([[0, 2],
+           [2, 0],
+           [0, 4],
+           [4, 0]])
+    '''
+
+    edge_index = edge_index.copy()
+    reduced_edge_index = edge_index[np.all(~np.isin(edge_index, reduced_index), axis = 1)]
+    return reduced_edge_index
+
+
+
 def get_reduced_adj_mat(mat, reduced_index):
     '''
     Mask some rows and columns of the adjacency or connectivity matrix of a molecule as 0 based on the indexes of hydrogen atoms that are deleted.
