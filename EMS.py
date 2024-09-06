@@ -157,7 +157,23 @@ class EMS(object):
             self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # adjacency matrix that excludes the bonds with reduced H atoms
             self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # connectivity matrix that excludes the bonds with reduced H atoms
 
-
+            if read_nmr:
+                try:
+                    if self.filename.split(".")[-2] == "nmredata" and read_nmr:
+                        shift, shift_var, coupling, coupling_vars = self.nmr_read()
+                        self.atom_properties["shift"] = shift
+                        self.atom_properties["shift_var"] = shift_var
+                        self.pair_properties["coupling"] = coupling
+                        self.pair_properties["coupling_var"] = coupling_vars
+                        assert len(self.atom_properties["shift"]) == len(self.type)
+                except:
+                    print(
+                        f"Read NMR called but no NMR data found for molecule {self.id}"
+                    )
+            
+            self.atom_properties['shift'] = average_atom_prop(self.atom_properties["shift"], self.reduced_H_dict, self.max_atoms)
+            self.atom_properties['shift_var'] = average_atom_prop(self.atom_properties["shift_var"], self.reduced_H_dict, self.max_atoms)
+            
 
 
 

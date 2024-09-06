@@ -26,7 +26,7 @@ file_dir = './test_mols/'
 file = 'testmol_1_NMR.nmredata.sdf'
 path = file_dir + file
 
-mol = EMS(path, mol_id = file, fragment = True)
+mol = EMS(path, mol_id = file, read_nmr = True, fragment = True)
 # mol = EMS('CC', line_notation = 'smi', fragment = True)
 print(mol.type)
 print(mol.xyz[:, 0].shape)
@@ -39,6 +39,8 @@ print(mol.dumb_atom_list)
 # print(mol.reduced_conn[:, 47])
 # print(mol.conn[:, 47])
 print(mol.mol_properties["SMILES"])
+print(mol.atom_properties['shift'])
+
 
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])

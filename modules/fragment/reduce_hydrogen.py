@@ -38,7 +38,7 @@ def matrix_to_edge_index(mat: np.ndarray) -> np.ndarray:
     return edge_index
 
 
-def hydrogen_reduction(rdmol: object):
+def hydrogen_reduction(rdmol: object) -> (dict[int, list[int]], dict[int, list[int]], list[int]):
     '''
     Delete the redundant hydrogen atoms which are equivalent to each other in a molecule. 
     For example, in a methyl group, the three hydrogen atoms are equivalent to each other.
@@ -96,7 +96,7 @@ def hydrogen_reduction(rdmol: object):
     return hydrogen_indexes, reduced_H_dict, reduced_H_list
 
 
-def get_reduced_edge_index(edge_index, reduced_index):
+def get_reduced_edge_index(edge_index: np.ndarray, reduced_index: np.ndarray) -> np.ndarray:
     '''
     Delete the edges that are connected to the deleted hydrogen atoms in a molecule.
 
@@ -139,7 +139,7 @@ def get_reduced_edge_index(edge_index, reduced_index):
 
 
 
-def get_reduced_adj_mat(mat, reduced_index):
+def get_reduced_adj_mat(mat: np.ndarray, reduced_index: list[int]) -> np.ndarray:
     '''
     Mask some rows and columns of the adjacency or connectivity matrix of a molecule as 0 based on the indexes of hydrogen atoms that are deleted.
 
@@ -176,3 +176,49 @@ def get_reduced_adj_mat(mat, reduced_index):
         reduced_mat[row, :] = 0
         reduced_mat[:, row] = 0
     return reduced_mat
+
+
+def average_atom_prop(prop: np.ndarray, reduced_H_dict: dict[int, list[int]], length: int) -> np.ndarray:
+    '''
+    Average the properties of the hydrogen atoms that are equivalent to each other in a molecule, and set the properties of the deleted hydrogen atoms as 0.
+    The property array will be extended to the maximum length. The properties of dumb atoms will be set as 0.
+
+    Parameters
+    ----------
+    prop : np.ndarray
+        The 1D property array of the atoms in the molecule. The shape of the matrix should be (n_atoms,).
+    
+    reduced_H_dict : dict[int, list[int]]
+        A dictionary that stores the indexes of the hydrogen atoms kept in the molecule and its equivalent hydrogen atoms deleted.
+        The key of the dictionary is the index of the hydrogen atom kept, and the value is a list of the indexes of its equivalent hydrogen atoms deleted.
+
+    length : int
+        The maximum numer of atoms in the molecule.
+    
+    Returns
+    -------
+    extended_prop: np.ndarray
+        The extended property array of the atoms in the molecule. The properties of the deleted hydrogen atoms and dumb atoms are masked as 0.
+        The shape of the matrix should be (length,).
+
+    Examples
+    --------
+    >>> prop = np.array([1, 2, 3, 4, 5, 6, 7, 8])
+    >>> reduced_H_dict = {2: [3, 4], 5: [6, 7]}
+    >>> length = 10
+    >>> average_atom_prop(prop, reduced_H_dict, length)
+    array([1, 2, 4, 0, 0, 7, 0, 0, 0, 0])
+    '''
+
+    prop = prop.copy()
+    reduced_H_dict = reduced_H_dict.copy()
+
+    for key, value in reduced_H_dict.items():
+        prop_to_average = [prop[key]] + [prop[i] for i in value]
+        prop[key] = np.mean(prop_to_average)
+        for i in value:
+            prop[i] = 0
+        
+    extended_prop = np.pad(prop, (0, length - len(prop)), 'constant', constant_values = 0)
+
+    return extended_prop
