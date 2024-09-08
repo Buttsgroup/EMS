@@ -45,6 +45,7 @@ print(mol.atom_properties['atom_type'])
 
 
 
+
 # for i in range(len(mol.adj)):
 #     print(mol.adj[i])
 #     print(mol.conn[i])

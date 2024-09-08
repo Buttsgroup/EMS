@@ -180,6 +180,7 @@ class EMS(object):
 
 
 
+
         # enter the normal mode of EMS
         else:
             self.get_coupling_types()

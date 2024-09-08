@@ -305,3 +305,5 @@ def flatten_pair_properties(mat: np.ndarray, edge_index: np.ndarray) -> np.ndarr
     col_index = edge_index[:, 1]
     flattened_mat = mat[row_index, col_index]
     return flattened_mat
+
+    
