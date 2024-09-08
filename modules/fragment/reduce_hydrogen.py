@@ -262,3 +262,46 @@ def reduce_atom_prop(prop: np.ndarray, reduced_H_list: list[int], length: int) -
     
     extended_prop = np.pad(prop, (0, length - len(prop)), 'constant', constant_values = 0)
     return extended_prop
+
+
+def flatten_pair_properties(mat: np.ndarray, edge_index: np.ndarray) -> np.ndarray:
+    '''
+    Extract the pair or bond properties, which are represented by a matrix with shape (n_atoms, n_atoms), based on the edge index and flatten it to a 1D array.
+
+    Parameters
+    ----------
+    mat : np.ndarray
+        The matrix of the pair or bond properties in the molecule. The shape of the matrix should be (n_atoms, n_atoms).
+    
+    edge_index : np.ndarray
+        The edge index of the molecule. The shape of the edge index should be (n_edges, 2). 
+        Each row of the matrix represents an edge (source atom index, destination atom index) in the molecule.
+
+    Returns
+    -------
+    flattened_mat: np.ndarray
+        The flattened array of the pair or bond properties in the molecule. The shape of the matrix is (n_edges,).
+
+    Examples
+    --------
+    >>> mat = np.array([[0, 1, 0, 0],
+    ...                 [1, 0, 2, 0],
+    ...                 [0, 2, 0, 3],
+    ...                 [0, 0, 3, 0]])
+    >>> edge_index = np.array([[0, 1],
+    ...                        [1, 0],
+    ...                        [1, 2],
+    ...                        [2, 1],
+    ...                        [2, 3],
+    ...                        [3, 2]])
+    >>> flatten_pair_properties(mat, edge_index)
+    array([1, 1, 2, 2, 3, 3])
+    '''
+    
+    mat = mat.copy()
+    edge_index = edge_index.copy()
+
+    row_index = edge_index[:, 0]
+    col_index = edge_index[:, 1]
+    flattened_mat = mat[row_index, col_index]
+    return flattened_mat

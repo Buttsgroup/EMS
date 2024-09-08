@@ -5,6 +5,8 @@ sys.path.append('..')
 
 from EMS import EMS
 
+import numpy as np
+
 
 
 
@@ -40,6 +42,7 @@ print(mol.dumb_atom_list)
 # print(mol.conn[:, 47])
 print(mol.mol_properties["SMILES"])
 print(mol.atom_properties['atom_type'])
+
 
 
 # for i in range(len(mol.adj)):
