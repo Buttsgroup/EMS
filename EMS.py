@@ -7,16 +7,15 @@ import re
 from io import StringIO
 import warnings
 
-from modules.properties.structure_io import from_rdmol, to_rdmol, ase_to_rdmol
+from modules.properties.structure_io import from_rdmol, to_rdmol
 from utils.periodic_table import Get_periodic_table
-from utils.fragment_utility import *
+from modules.fragment.reduce_hydrogen import *
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
 
-from collections import defaultdict
 
 
 class EMS(object):
@@ -29,6 +28,7 @@ class EMS(object):
         read_nmr=False,
         streamlit=False,
         fragment=False,
+        max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
 
         # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
@@ -61,6 +61,7 @@ class EMS(object):
         self.pair_properties = {}
         self.mol_properties = {}
         self.flat = False
+        self.max_atoms = max_atoms
         self.streamlit = streamlit
         self.fragment = fragment
 
@@ -134,14 +135,49 @@ class EMS(object):
         self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
-        self.symmetric = self.check_symmetric()
+        self.symmetric = self.check_symmetric()                         # check if the non-hydrogen backbone of the molecule is symmetric
+
+        # raise an error if the number of atoms in the molecule is greater than the maximum number of atoms allowed
+        if self.max_atoms < len(self.type):
+            raise ValueError(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
 
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
-            self.edge_index = binary_matrix_to_index(self.adj)
-            self.H_index = self.get_hydrogen_indexes()                  # a dictionary, key is the atom index, value is a list of hydrogen atom indexes
-            self.H_to_reduce = get_reduced_H(self.H_index)              # a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes
-            self.H_match = None
+            self.edge_index = matrix_to_edge_index(self.adj)
+
+            # self.H_index_dict: a dictionary, key is the non-hydrogen atom index, value is a list of hydrogen atom indexes linked to this non-hydrogen atom
+            # self.reduced_H_dict: a dictionary, key is the H atom index, value is a list of its equivalent H atom indexes to be deleted
+            # self.reduced_H_list: a list of all H atoms to be reduced
+            self.H_index_dict, self.reduced_H_dict, self.reduced_H_list = hydrogen_reduction(self.rdmol) 
+
+            self.eff_atom_list = list(set(range(len(self.type))) - set(self.reduced_H_list))         # a list of effective atoms that excludes the reduced H atoms
+            self.dumb_atom_list = list(set(range(self.max_atoms)) - set(self.eff_atom_list))         # a list of dumb atoms including both reduced H atoms and extra atoms
+
+            self.reduced_edge_index = get_reduced_edge_index(self.edge_index, self.reduced_H_list)         # edge index that excludes the bonds with reduced H atoms
+            self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # adjacency matrix that excludes the bonds with reduced H atoms
+            self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # connectivity matrix that excludes the bonds with reduced H atoms
+
+            if read_nmr:
+                try:
+                    if self.filename.split(".")[-2] == "nmredata" and read_nmr:
+                        shift, shift_var, coupling, coupling_vars = self.nmr_read()
+                        self.atom_properties["shift"] = shift
+                        self.atom_properties["shift_var"] = shift_var
+                        self.pair_properties["coupling"] = coupling
+                        self.pair_properties["coupling_var"] = coupling_vars
+                        assert len(self.atom_properties["shift"]) == len(self.type)
+                except:
+                    print(
+                        f"Read NMR called but no NMR data found for molecule {self.id}"
+                    )
+            
+            self.atom_properties['shift'] = average_atom_prop(self.atom_properties["shift"], self.reduced_H_dict, self.max_atoms)
+            self.atom_properties['shift_var'] = average_atom_prop(self.atom_properties["shift_var"], self.reduced_H_dict, self.max_atoms)
+            self.atom_properties['atom_type'] = reduce_atom_prop(self.type, self.reduced_H_list, self.max_atoms)
+
+            self.pair_properties['bond_order'] = flatten_pair_properties(self.reduced_conn, self.reduced_edge_index)
+
+
 
 
 
@@ -348,15 +384,6 @@ class EMS(object):
     def get_graph_distance(self):
         return Chem.GetDistanceMatrix(self.rdmol), Chem.Get3DDistanceMatrix(self.rdmol)
 
-    def get_hydrogen_indexes(self):
-        hydrogen_indexes = defaultdict(list)
-        for atom in self.rdmol.GetAtoms():
-            for neighbor in atom.GetNeighbors():
-                if neighbor.GetAtomicNum() == 1:
-                    hydrogen_indexes[atom.GetIdx()].append(neighbor.GetIdx())
-
-        return hydrogen_indexes
-
     def get_coupling_types(self) -> None:
         """
         Function for generating all the coupling types for all atom-pair interactions, stores internally in pair_properties attributes.
@@ -527,24 +554,3 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
         pairs.to_pickle(f"{write}/pairs.pkl")
     else:
         return pairs
-
-
-
-
-
-
-file_dir = './tests/test_mols/'
-file = 'testmol_1_NMR.nmredata.sdf'
-path = file_dir + file
-
-mol = EMS(path, mol_id = file, fragment = True)
-print(mol.type)
-print(mol.xyz[:, 0].shape)
-print(mol.symmetric)
-print(mol.H_index)
-print(mol.H_to_reduce)
-
-# for i in range(len(mol.adj)):
-#     print(mol.adj[i])
-#     print(mol.conn[i])
-#     print('\n')
