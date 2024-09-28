@@ -558,6 +558,7 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
         "atom_index_1": atom_index_1,
         "distance": dist,
         "path_len": path_len,
+        "bond_existence": bond_existence,
     }
     for p, propname in enumerate(ems.pair_properties.keys()):
         pairs[propname] = pair_props[p]
