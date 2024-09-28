@@ -57,6 +57,7 @@ class EMS(object):
         self.adj = None                    # self.adj is the adjacency matrix of the molecule
         self.path_topology = None          # Path length between atoms
         self.path_distance = None          # 3D distance between atoms
+        self.bond_existence = None         # whether a bond exists between two atoms, made up of 0 or 1
         self.atom_properties = {}
         self.pair_properties = {}
         self.mol_properties = {}
@@ -526,6 +527,7 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
     dist = []  # distance between atoms
     path_len = []  # number of pairs between atoms (shortest path)
     pair_props = []
+    bond_existence = []
     for propname in ems_list[0].pair_properties.keys():
         pair_props.append([])
 
@@ -545,6 +547,7 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
                 atom_index_1.append(t2)
                 dist.append(ems.path_distance[t][t2])
                 path_len.append(int(ems.path_topology[t][t2]))
+                bond_existence.append(ems.adj[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
                     pair_props[p].append(ems.pair_properties[prop][t][t2])
 
