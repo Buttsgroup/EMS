@@ -437,7 +437,7 @@ class EMS(object):
         self.rdmol = to_rdmol(self)
 
 
-def make_atoms_df(ems_list, write=False, format="pickle"):
+def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
     p_table = Get_periodic_table()
 
     # construct dataframes
@@ -472,7 +472,15 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
             conns.append(ems.conn[t])
             smiles.append(ems.mol_properties["SMILES"])
             for p, prop in enumerate(ems.atom_properties.keys()):
-                atom_props[p].append(ems.atom_properties[prop][t])
+                if prop == 'shift' and atom_list == 'all':
+                    atom_props[p].append(ems.atom_properties[prop][t])
+                elif prop == 'shift' and atom_list != 'all':
+                    if p_table[type] in atom_list:
+                        atom_props[p].append(ems.atom_properties[prop][t])
+                    else:
+                        atom_props[p].append(0.0)
+                else:
+                    atom_props[p].append(ems.atom_properties[prop][t])
 
     # Construct dataframe
     atoms = {
