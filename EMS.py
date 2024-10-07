@@ -451,6 +451,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
     z = []  # z coordinate
     conns = []
     atom_props = []
+    smiles = []
     for propname in ems_list[0].atom_properties.keys():
         atom_props.append([])
 
@@ -469,7 +470,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
             y.append(ems.xyz[t][1])
             z.append(ems.xyz[t][2])
             conns.append(ems.conn[t])
-            smiles = ems.mol_properties["SMILES"]
+            smiles.append(ems.mol_properties["SMILES"])
             for p, prop in enumerate(ems.atom_properties.keys()):
                 atom_props[p].append(ems.atom_properties[prop][t])
 
