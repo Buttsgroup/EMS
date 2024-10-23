@@ -1,6 +1,6 @@
 import pandas as pd
 from tqdm import tqdm
-from utils.periodic_table import Get_periodic_table
+from EMS.utils.periodic_table import Get_periodic_table
 
 def make_atoms_df(ems_list, write=False, format="pickle"):
     p_table = Get_periodic_table()
