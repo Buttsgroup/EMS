@@ -127,8 +127,8 @@ class EMS(object):
                     self.file, removeHs=False, sanitize=False
                 )
                 
-            elif ftype == "ase":
-                    self.rdmol = ase_to_rdmol(self.file)
+            # elif ftype == "ase":
+            #         self.rdmol = ase_to_rdmol(self.file)
                 
             else:
                 raise ValueError(f"File type, {ftype} not supported")
