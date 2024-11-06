@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import copy
+import random
 
 import glob
 import re
@@ -140,7 +142,7 @@ class EMS(object):
             self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
             self.path_topology, self.path_distance = self.get_graph_distance()
             self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
-            # self.symmetric = self.check_symmetric()                         # check if the non-hydrogen backbone of the molecule is symmetric
+            self.symmetric = self.check_symmetric()                         # check if the non-hydrogen backbone of the molecule is symmetric
 
             # raise an error if the number of atoms in the molecule is greater than the maximum number of atoms allowed
             if self.max_atoms < len(self.type):
@@ -231,7 +233,8 @@ class EMS(object):
     def check_z_ords(self):
         if self.streamlit:
             for line in self.stringfile:
-                if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
+                # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
+                if len(line.split()) == 12 and line.split()[-1] != 'V2000':
                     z_coord = float(
                         line.split()[3]
                     )  # Assuming the z coordinate is the fourth field
@@ -243,7 +246,8 @@ class EMS(object):
             with open(self.stringfile, "r") as f:
                 lines = f.readlines()[3:]
                 for line in lines:
-                    if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
+                    # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
+                    if len(line.split()) == 12 and line.split()[-1] != 'V2000':
                         z_coord = float(
                             line.split()[3]
                         )  # Assuming the z coordinate is the fourth field
@@ -252,13 +256,46 @@ class EMS(object):
                 return True
 
     def check_symmetric(self):
-        mol = Chem.rdmolops.RemoveAllHs(self.rdmol)
+        mol = copy.deepcopy(self.rdmol)
+        Chem.RemoveStereochemistry(mol)
+        mol = Chem.rdmolops.RemoveAllHs(mol)
         canonical_ranking = list(rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))
         
         if len(canonical_ranking) == len(set(canonical_ranking)):
             return False
         else:
             return True
+        
+    def check_semi_symmetric(self, atom_type_threshold={}):
+        symmetric = False
+
+        chemical_shift_df = pd.DataFrame({
+            'atom_type': self.type,
+            'shift': self.atom_properties['shift']
+            })
+        
+        for atom_type in atom_type_threshold:
+            threshold = atom_type_threshold[atom_type]
+            atom_type_CS = chemical_shift_df[chemical_shift_df['atom_type'] == atom_type]['shift'].to_list()
+            
+            for i in range(len(atom_type_CS)):
+                for j in range(i+1, len(atom_type_CS)):
+                    if abs(atom_type_CS[i] - atom_type_CS[j]) < threshold:
+                        symmetric = True
+        
+        return symmetric
+    
+    def check_atom_type_number(self, atom_type_number_threshold={}):
+        check = True
+        atom_types = self.type.tolist()
+
+        for atom_type in atom_type_number_threshold:
+            threshold = atom_type_number_threshold[atom_type]
+            if atom_types.count(atom_type) > threshold:
+                check = False
+                break
+
+        return check
 
     def nmr_read(self):
         if self.streamlit:
@@ -526,7 +563,7 @@ def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, coupling_list='all', write=False, max_pathlen=6):
+def make_pairs_df(ems_list, coupling_list='all', peak_frequency = {}, write=False, max_pathlen=6):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -562,7 +599,14 @@ def make_pairs_df(ems_list, coupling_list='all', write=False, max_pathlen=6):
                         pair_props[p].append(ems.pair_properties[prop][t][t2])
                     elif prop == 'coupling' and coupling_list != 'all':
                         if ems.pair_properties['nmr_types'][t][t2] in coupling_list:
-                            pair_props[p].append(ems.pair_properties[prop][t][t2])
+                            if ems.pair_properties['nmr_types'][t][t2] in peak_frequency:
+                                freq = peak_frequency[ems.pair_properties['nmr_types'][t][t2]]
+                                if random.random() < freq:
+                                    pair_props[p].append(ems.pair_properties[prop][t][t2])
+                                else:
+                                    pair_props[p].append(0.0)
+                            else:
+                                pair_props[p].append(ems.pair_properties[prop][t][t2])
                         else:
                             pair_props[p].append(0.0)
                     else:
