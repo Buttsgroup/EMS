@@ -106,7 +106,7 @@ class EMS(object):
                                 mol.SetProp("_Name", self.id)
                             self.rdmol = mol
             elif ftype == "xyz":
-                self.rdmol = Chem.MolFromXYZFile(self.path)
+                self.rdmol = Chem.MolFromXYZFile(self.file)
 
             elif ftype == "mol2":
                 self.rdmol = Chem.MolFromMol2File(
@@ -563,7 +563,7 @@ def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, coupling_list='all', peak_frequency = {}, write=False, max_pathlen=6):
+def make_pairs_df(ems_list, coupling_list='all', write=False, max_pathlen=6):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -599,14 +599,7 @@ def make_pairs_df(ems_list, coupling_list='all', peak_frequency = {}, write=Fals
                         pair_props[p].append(ems.pair_properties[prop][t][t2])
                     elif prop == 'coupling' and coupling_list != 'all':
                         if ems.pair_properties['nmr_types'][t][t2] in coupling_list:
-                            if ems.pair_properties['nmr_types'][t][t2] in peak_frequency:
-                                freq = peak_frequency[ems.pair_properties['nmr_types'][t][t2]]
-                                if random.random() < freq:
-                                    pair_props[p].append(ems.pair_properties[prop][t][t2])
-                                else:
-                                    pair_props[p].append(0.0)
-                            else:
-                                pair_props[p].append(ems.pair_properties[prop][t][t2])
+                            pair_props[p].append(ems.pair_properties[prop][t][t2])
                         else:
                             pair_props[p].append(0.0)
                     else:
