@@ -27,12 +27,13 @@ class EMS(object):
         file,              # file path
         mol_id=None,
         line_notation=None,           # 'smi' or 'smarts'
-        read_nmr=True,
+        nmr=False,
         streamlit=False,
         fragment=False,
         max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
-
+        
+        # To initialize self.id, self.filename, self.file and self.stringfile
         # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
         # if the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
         # if the molecule file is neither SMILES/SMARTS string or streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are the same, i.e. the file path
@@ -165,9 +166,9 @@ class EMS(object):
             self.reduced_adj = get_reduced_adj_mat(self.adj, self.reduced_H_list)         # adjacency matrix that excludes the bonds with reduced H atoms
             self.reduced_conn = get_reduced_adj_mat(self.conn, self.reduced_H_list)       # connectivity matrix that excludes the bonds with reduced H atoms
 
-            if read_nmr:
+            if nmr:
                 try:
-                    if self.filename.split(".")[-2] == "nmredata" and read_nmr:
+                    if self.filename.split(".")[-2] == "nmredata" and nmr:
                         shift, shift_var, coupling, coupling_vars = self.nmr_read()
                         self.atom_properties["shift"] = shift
                         self.atom_properties["shift_var"] = shift_var
@@ -190,9 +191,9 @@ class EMS(object):
         elif self.pass_valence_check:
             self.get_coupling_types()
 
-            if read_nmr:
+            if nmr:
                 try:
-                    if self.filename.split(".")[-2] == "nmredata" and read_nmr:
+                    if self.filename.split(".")[-2] == "nmredata" and nmr:
                         shift, shift_var, coupling, coupling_vars = self.nmr_read()
                         self.atom_properties["shift"] = shift
                         self.atom_properties["shift_var"] = shift_var
