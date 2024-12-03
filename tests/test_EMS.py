@@ -28,7 +28,7 @@ file_dir = './test_mols/'
 file = 'testmol_1_NMR.nmredata.sdf'
 path = file_dir + file
 
-mol = EMS(path, mol_id = file, read_nmr = True, fragment = True)
+mol = EMS(path, mol_id = file, nmr = True, fragment = True)
 # mol = EMS('CC', line_notation = 'smi', fragment = True)
 print(mol.type)
 print(mol.xyz[:, 0].shape)
