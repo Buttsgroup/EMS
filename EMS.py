@@ -85,7 +85,7 @@ class EMS(object):
             ftype = self.filename.split(".")[-1]
 
             if ftype == "sdf":
-                if not self.check_z_ords():
+                if self.check_Zcoords_zero():
                     self.flat = True
                     warnings.warn(
                         f"Warning: {self.id} - All Z coordinates are 0 - Flat flag set to True"
@@ -232,7 +232,9 @@ class EMS(object):
                 break
         return check
 
-    def check_z_ords(self):
+    def check_Zcoords_zero(self):
+        # If the Z coordinates are all zero, the molecule is flat and return True
+        # Otherwise, if there is at least one non-zero Z coordinate, return False
         if self.streamlit:
             for line in self.stringfile:
                 # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
@@ -246,15 +248,21 @@ class EMS(object):
 
         else:
             with open(self.stringfile, "r") as f:
-                lines = f.readlines()[3:]
+                lines = f.readlines()[2:]
+                coord_flag = False
                 for line in lines:
                     # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
-                    if len(line.split()) == 12 and line.split()[-1] != 'V2000':
+                    if 'V2000' in line:
+                        coord_flag = True
+                        continue
+                    if coord_flag and len(line.split()) > 12 and line.split()[3].isalpha():
                         z_coord = float(
-                            line.split()[3]
+                            line.split()[2]
                         )  # Assuming the z coordinate is the fourth field
-                        if z_coord != 0:
+                        if abs(z_coord) > 1e-6:
                             return False
+                    elif coord_flag and len(line.split()) < 12:
+                        break
                 return True
 
     def check_symmetric(self):

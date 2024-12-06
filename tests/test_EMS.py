@@ -27,6 +27,10 @@ class TestSDF:
     def test_sdf_id(self, testmol_1):
         print(f'EMS.id: {testmol_1.id}')
         assert True
+
+    def test_check_Zcoords_zero(self, testmol_1):
+        print(f'EMS.check_z_ords: {testmol_1.check_Zcoords_zero()}')
+        assert testmol_1.check_Zcoords_zero() == False
     
 
 
