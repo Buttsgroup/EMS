@@ -28,7 +28,7 @@ class EMS(object):
         mol_id=None,
         line_notation=None,           # 'smi' or 'smarts'
         nmr=False,
-        streamlit=False,
+        streamlit=False,        # streamlit mode is used to read the file from ForwardSDMolSupplier
         fragment=False,
         max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
