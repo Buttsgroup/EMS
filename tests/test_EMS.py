@@ -1,52 +1,36 @@
-'needs to add functions for testing the EMS class'
-
 import sys
-sys.path.append('..')
-
-from EMS import EMS
-
+import pytest
+sys.path.append('/user/home/rv22218/work/inv_IMPRESSION/EMS')
+import EMS as ems
 import numpy as np
 
+class TestSDF:
+
+    def setup_method(self, method):
+        print()
+        print(f'Setting up {method}')
+
+    def teardown_method(self, method):
+        print()
+        print(f'Tearing down {method}')
+
+    def test_sdf_file_stringfile(self, testmol_1):
+        print(f'EMS.file: {testmol_1.file}')
+        print(f'EMS.stringfile: {testmol_1.stringfile}')
+        assert testmol_1.stringfile == testmol_1.file
+        assert testmol_1.file == '/user/home/rv22218/work/inv_IMPRESSION/EMS/tests/test_mols/testmol_1_NMR.nmredata.sdf'
+
+    def test_sdf_filename(self, testmol_1):
+        print(f'EMS.filename: {testmol_1.filename}')
+        assert testmol_1.filename == 'testmol_1_NMR.nmredata.sdf'
+
+    def test_sdf_id(self, testmol_1):
+        print(f'EMS.id: {testmol_1.id}')
+        assert True
+    
 
 
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-file_dir = './test_mols/'
-file = 'testmol_1_NMR.nmredata.sdf'
-path = file_dir + file
-
-mol = EMS(path, mol_id = file, nmr = True, fragment = True)
-# mol = EMS('CC', line_notation = 'smi', fragment = True)
-print(mol.type)
-print(mol.xyz[:, 0].shape)
-print(mol.symmetric)
-print(mol.H_index_dict)
-print(mol.reduced_H_dict)
-print(mol.reduced_H_list)
-print(mol.eff_atom_list)
-print(mol.dumb_atom_list)
-# print(mol.reduced_conn[:, 47])
-# print(mol.conn[:, 47])
-print(mol.mol_properties["SMILES"])
-print(mol.atom_properties['atom_type'])
-
-
-
-
-# for i in range(len(mol.adj)):
-#     print(mol.adj[i])
-#     print(mol.conn[i])
-#     print('\n')

@@ -36,7 +36,8 @@ class EMS(object):
         # To initialize self.id, self.filename, self.file and self.stringfile
         # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
         # if the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
-        # if the molecule file is neither SMILES/SMARTS string or streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are the same, i.e. the file path
+        # if the molecule file is neither SMILES/SMARTS string or streamlit, like .sdf file, self.id is the customarized 'mol_id' name, 
+        # self.file and self.stringfile are the file path, and self.filename is the file name
         if line_notation:
             self.id = file
         else:
@@ -44,7 +45,7 @@ class EMS(object):
         if streamlit and not line_notation:
             self.filename = file.name
         else:
-            self.filename = file
+            self.filename = file.split('/')[-1]
 
         self.file = file
 
