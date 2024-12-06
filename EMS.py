@@ -37,7 +37,7 @@ class EMS(object):
         # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
         # if the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
         # if the molecule file is neither SMILES/SMARTS string or streamlit, like .sdf file, self.id is the customarized 'mol_id' name, 
-        # self.file and self.stringfile are the file path, and self.filename is the file name
+        # self.file and self.stringfile are the file path, and self.filename is the file name, simplified from the file path
         if line_notation:
             self.id = file
         else:
@@ -90,23 +90,27 @@ class EMS(object):
                     warnings.warn(
                         f"Warning: {self.id} - All Z coordinates are 0 - Flat flag set to True"
                     )
+
                 if streamlit:
                     for mol in Chem.ForwardSDMolSupplier(
                         self.file, removeHs=False, sanitize=False
                     ):
                         if mol is not None:
-                            if mol.GetProp("_Name") is None:
+                            if not mol.GetProp("_Name"):
                                 mol.SetProp("_Name", self.id)
                             self.rdmol = mol
+                        break
 
                 else:
                     for mol in Chem.SDMolSupplier(
                         self.file, removeHs=False, sanitize=False
                     ):
                         if mol is not None:
-                            if mol.GetProp("_Name") is None:
+                            if not mol.GetProp("_Name"):
                                 mol.SetProp("_Name", self.id)
                             self.rdmol = mol
+                        break
+
             elif ftype == "xyz":
                 self.rdmol = Chem.MolFromXYZFile(self.file)
 

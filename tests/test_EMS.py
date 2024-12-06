@@ -31,6 +31,12 @@ class TestSDF:
     def test_check_Zcoords_zero(self, testmol_1):
         print(f'EMS.check_z_ords: {testmol_1.check_Zcoords_zero()}')
         assert testmol_1.check_Zcoords_zero() == False
+
+    def test_check_RDMolProp(self, testmol_1):
+        print(f'RDMol.GetProp: {testmol_1.rdmol.GetProp("_Name")}')
+        if testmol_1.rdmol.GetProp('_Name') == testmol_1.id:
+            print('The _Name property of this RDMol is the same as its EMS.id')
+        assert True
     
 
 
