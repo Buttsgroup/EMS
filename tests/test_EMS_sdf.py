@@ -1,7 +1,10 @@
 import sys
+import os
 sys.path.append('/user/home/rv22218/work/inv_IMPRESSION/EMS')
 import EMS as ems
 import rdkit
+
+# test_mol_path = '/user/home/rv22218/work/inv_IMPRESSION/EMS/tests/test_mols'
 
 class TestSDF:
 
@@ -13,15 +16,15 @@ class TestSDF:
         print()
         print(f'Tearing down {method}')
 
-    def test_sdf_file_stringfile(self, testmol_1):
-        print(f'EMS.file: {testmol_1.file}')
-        print(f'EMS.stringfile: {testmol_1.stringfile}')
-        assert testmol_1.stringfile == testmol_1.file
-        assert testmol_1.file == '/user/home/rv22218/work/inv_IMPRESSION/EMS/tests/test_mols/testmol_1_NMR.nmredata.sdf'
-
     def test_sdf_filename(self, testmol_1):
         print(f'EMS.filename: {testmol_1.filename}')
         assert testmol_1.filename == 'testmol_1_NMR.nmredata.sdf'
+
+    def test_sdf_file_stringfile(self, testmol_1, mol_dir):
+        print(f'EMS.file: {testmol_1.file}')
+        print(f'EMS.stringfile: {testmol_1.stringfile}')
+        assert testmol_1.stringfile == testmol_1.file
+        assert testmol_1.file == os.path.join(mol_dir, 'testmol_1_NMR.nmredata.sdf')
 
     def test_sdf_id(self, testmol_1):
         print(f'EMS.id: {testmol_1.id}')

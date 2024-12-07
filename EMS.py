@@ -92,24 +92,10 @@ class EMS(object):
                     )
 
                 if streamlit:
-                    for mol in Chem.ForwardSDMolSupplier(
-                        self.file, removeHs=False, sanitize=False
-                    ):
-                        if mol is not None:
-                            if not mol.GetProp("_Name"):
-                                mol.SetProp("_Name", self.id)
-                            self.rdmol = mol
-                        break
+                    self.rdmol = self.SDFfile_to_rdmol(self.file, streamlit=True)
 
                 else:
-                    for mol in Chem.SDMolSupplier(
-                        self.file, removeHs=False, sanitize=False
-                    ):
-                        if mol is not None:
-                            if not mol.GetProp("_Name"):
-                                mol.SetProp("_Name", self.id)
-                            self.rdmol = mol
-                        break
+                    self.rdmol = self.SDFfile_to_rdmol(self.file, streamlit=False)
 
             elif ftype == "xyz":
                 self.rdmol = Chem.MolFromXYZFile(self.file)
@@ -486,6 +472,18 @@ class EMS(object):
 
     def convert_to_rdmol(self):
         self.rdmol = to_rdmol(self)
+
+    def SDFfile_to_rdmol(self, file_path, streamlit=False):
+        if streamlit:
+            SDMolMethod = Chem.ForwardSDMolSupplier
+        else:
+            SDMolMethod = Chem.SDMolSupplier
+        
+        for mol in SDMolMethod(file_path, removeHs=False, sanitize=False):
+            if mol is not None:
+                if not mol.GetProp("_Name"):
+                    mol.SetProp("_Name", self.id)
+                return mol
 
 
 def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
