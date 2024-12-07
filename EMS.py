@@ -26,10 +26,11 @@ class EMS(object):
 
     def __init__(
         self,
-        file,              # file path
-        mol_id=None,
-        line_notation=None,           # 'smi' or 'smarts'
-        nmr=False,
+        file,                      # file path
+        mol_id=None,               # Customarized molecule id
+        line_notation=None,        # 'smi' or 'smarts'
+        rdkit_mol=False,           # whether to read the file as an rdkit molecule
+        nmr=False,                 # whether to read NMR data from SDF files
         streamlit=False,        # streamlit mode is used to read the file from ForwardSDMolSupplier
         fragment=False,
         max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
@@ -40,19 +41,28 @@ class EMS(object):
         # if the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
         # if the molecule file is neither SMILES/SMARTS string or streamlit, like .sdf file, self.id is the customarized 'mol_id' name, 
         # self.file and self.stringfile are the file path, and self.filename is the file name, simplified from the file path
+        # if the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customarized 'mol_id' name
         if line_notation:
             self.id = file
         else:
             self.id = mol_id
+
         if streamlit and not line_notation:
             self.filename = file.name
+        elif rdkit_mol:
+            self.filename = mol_id
         else:
             self.filename = file.split('/')[-1]
-
-        self.file = file
+        
+        if rdkit_mol:
+            self.file = mol_id
+        else:
+            self.file = file
 
         if streamlit and not line_notation:
             self.stringfile = StringIO(file.getvalue().decode("utf-8"))
+        elif rdkit_mol:
+            self.stringfile = mol_id
         else:
             self.stringfile = file
 
@@ -83,6 +93,9 @@ class EMS(object):
             else:
                 raise ValueError(f"Line notation, {line_notation}, not supported")
 
+        elif rdkit_mol:
+            self.rdmol = file
+ 
         else:
             ftype = self.filename.split(".")[-1]
 
