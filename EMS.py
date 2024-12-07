@@ -8,6 +8,7 @@ import glob
 import re
 from io import StringIO
 import warnings
+import os
 
 from modules.properties.structure_io import from_rdmol, to_rdmol
 from utils.periodic_table import Get_periodic_table
@@ -18,6 +19,7 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
 
+import openbabel.pybel as pyb
 
 
 class EMS(object):
@@ -98,7 +100,11 @@ class EMS(object):
                     self.rdmol = self.SDFfile_to_rdmol(self.file, streamlit=False)
 
             elif ftype == "xyz":
-                self.rdmol = Chem.MolFromXYZFile(self.file)
+                tmp_file = '_tmp.sdf'
+                obmol = next(pyb.readfile('xyz', self.file))
+                obmol.write('sdf', tmp_file, overwrite=True)
+                self.rdmol = self.SDFfile_to_rdmol(tmp_file, streamlit=False)
+                os.remove(tmp_file)
 
             elif ftype == "mol2":
                 self.rdmol = Chem.MolFromMol2File(
@@ -124,6 +130,9 @@ class EMS(object):
                 
             else:
                 raise ValueError(f"File type, {ftype} not supported")
+
+
+        # check if self.rdmol is None
 
         # check if every atom in the molecule has a correct valence
         self.pass_valence_check = self.check_valence()
