@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append('/user/home/rv22218/work/inv_IMPRESSION/EMS')
 import EMS as ems
-import rdkit
+from rdkit import Chem
 import pytest
 
 mol_list = ['testmol_sdf_1', 
@@ -50,17 +50,9 @@ class TestEMSclass:
         assert mol.file == Xfile
         assert mol.filename == Xfilename
         assert mol.stringfile == Xstringfile
+        assert type(mol.rdmol) == Chem.rdchem.Mol
 
-    
-    # @pytest.mark.parametrize('mol', smiles_mol_list)
-    # def test_smiles_filenames(self, mol, request):
-    #     mol = request.getfixturevalue(mol)
-    #     print(f'EMS.file: {mol.file}')
-    #     print(f'EMS.id: {mol.id}')
-    #     print(f'EMS.filename: {mol.filename}')
-    #     print(f'EMS.stringfile: {mol.stringfile}')
-    #     print(mol.xyz)
-    #     assert True
+
 
 
     # def test_check_Zcoords_zero(self, testmol_1):

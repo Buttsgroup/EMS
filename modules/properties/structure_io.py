@@ -13,9 +13,9 @@ def from_rdmol(rdmol):
         type_array[i] = atoms.GetAtomicNum()
         if rdmol.GetNumConformers() < 1:
             AllChem.Compute2DCoords(rdmol)
-        xyz_array[i][0] = rdmol.GetConformer().GetAtomPosition(i).x
-        xyz_array[i][1] = rdmol.GetConformer().GetAtomPosition(i).y
-        xyz_array[i][2] = rdmol.GetConformer().GetAtomPosition(i).z
+        xyz_array[i][0] = rdmol.GetConformer(0).GetAtomPosition(i).x
+        xyz_array[i][1] = rdmol.GetConformer(0).GetAtomPosition(i).y
+        xyz_array[i][2] = rdmol.GetConformer(0).GetAtomPosition(i).z
 
         for j, atoms in enumerate(rdmol.GetAtoms()):
             if i == j:
@@ -74,3 +74,15 @@ def to_rdmol(ems_mol, sanitize=True):
     if sanitize:
         Chem.SanitizeMol(rdmol)
     return rdmol
+
+def SDFfile_to_rdmol(file_path, filename, streamlit=False):
+    if streamlit:
+        SDMolMethod = Chem.ForwardSDMolSupplier
+    else:
+        SDMolMethod = Chem.SDMolSupplier
+    
+    for mol in SDMolMethod(file_path, removeHs=False, sanitize=False):
+        if mol is not None:
+            if not mol.GetProp("_Name"):
+                mol.SetProp("_Name", filename)
+            return mol

@@ -10,7 +10,7 @@ from io import StringIO
 import warnings
 import os
 
-from modules.properties.structure_io import from_rdmol, to_rdmol
+from modules.properties.structure_io import from_rdmol, to_rdmol, SDFfile_to_rdmol
 from utils.periodic_table import Get_periodic_table
 from modules.fragment.reduce_hydrogen import *
 
@@ -86,12 +86,13 @@ class EMS(object):
         if line_notation:
             if line_notation == "smi":
                 self.rdmol = Chem.MolFromSmiles(file)
-                self.rdmol = Chem.AddHs(self.rdmol)
-                AllChem.EmbedMolecule(self.rdmol)              # obtain initial coordinates for a molecule
             elif line_notation == "smarts":
                 self.rdmol = Chem.MolFromSmarts(file)
             else:
                 raise ValueError(f"Line notation, {line_notation}, not supported")
+            
+            self.rdmol = Chem.AddHs(self.rdmol)
+            AllChem.EmbedMolecule(self.rdmol)              # obtain the initial 3D structure for a molecule
 
         elif rdkit_mol:
             self.rdmol = file
@@ -107,16 +108,15 @@ class EMS(object):
                     )
 
                 if streamlit:
-                    self.rdmol = self.SDFfile_to_rdmol(self.file, streamlit=True)
-
+                    self.rdmol = SDFfile_to_rdmol(self.file, self.filename, streamlit=True)
                 else:
-                    self.rdmol = self.SDFfile_to_rdmol(self.file, streamlit=False)
+                    self.rdmol = SDFfile_to_rdmol(self.file, self.filename, streamlit=False)
 
             elif ftype == "xyz":
                 tmp_file = '_tmp.sdf'
                 obmol = next(pyb.readfile('xyz', self.file))
                 obmol.write('sdf', tmp_file, overwrite=True)
-                self.rdmol = self.SDFfile_to_rdmol(tmp_file, streamlit=False)
+                self.rdmol = SDFfile_to_rdmol(tmp_file, self.filename, streamlit=False)
                 os.remove(tmp_file)
 
             elif ftype == "mol2":
@@ -138,14 +138,14 @@ class EMS(object):
                     self.file, removeHs=False, sanitize=False
                 )
                 
-            # elif ftype == "ase":
-            #         self.rdmol = ase_to_rdmol(self.file)
-                
+            # Add file reading for ASE molecules with '.traj' extension when available
+
             else:
                 raise ValueError(f"File type, {ftype} not supported")
 
-
-        # check if self.rdmol is None
+        # check if self.rdmol is the correct type
+        if not isinstance(self.rdmol, Chem.rdchem.Mol):
+            raise ValueError(f"File {self.file} not read correctly")
 
         # check if every atom in the molecule has a correct valence
         self.pass_valence_check = self.check_valence()
@@ -494,18 +494,6 @@ class EMS(object):
 
     def convert_to_rdmol(self):
         self.rdmol = to_rdmol(self)
-
-    def SDFfile_to_rdmol(self, file_path, streamlit=False):
-        if streamlit:
-            SDMolMethod = Chem.ForwardSDMolSupplier
-        else:
-            SDMolMethod = Chem.SDMolSupplier
-        
-        for mol in SDMolMethod(file_path, removeHs=False, sanitize=False):
-            if mol is not None:
-                if not mol.GetProp("_Name"):
-                    mol.SetProp("_Name", self.id)
-                return mol
 
 
 def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
