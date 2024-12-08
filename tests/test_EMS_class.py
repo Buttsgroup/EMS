@@ -5,7 +5,10 @@ import EMS as ems
 import rdkit
 import pytest
 
-mol_list = ['testmol_1', 'testmol_xyz']
+mol_list = ['testmol_sdf_1', 
+            'testmol_xyz',
+            'testmol_smiles_asym',
+            'testmol_rdmol']
 
 class TestEMSclass:
     def setup_method(self, method):
@@ -18,10 +21,27 @@ class TestEMSclass:
 
     @pytest.mark.parametrize('mol', mol_list)
     def test_filenames(self, mol, request):
-        mol = request.getfixturevalue(mol)
-        Xfile = mol.file
-        Xfilename = Xfile.split('/')[-1]
-        Xstringfile = Xfile
+        if 'smiles' in mol:
+            mol = request.getfixturevalue(mol)
+            Xfile = mol.file
+            Xfilename = Xfile
+            Xstringfile = Xfile
+            Xid = Xfile
+            assert mol.id == Xid
+        
+        elif 'rdmol' in mol:
+            mol = request.getfixturevalue(mol)
+            Xfile = None
+            Xfilename = None
+            Xstringfile = None
+            Xid = None
+
+        else:
+            mol = request.getfixturevalue(mol)
+            Xfile = mol.file
+            Xfilename = Xfile.split('/')[-1]
+            Xstringfile = Xfile
+
         print(f'EMS.file: {mol.file}')
         print(f'EMS.id: {mol.id}')
         print(f'EMS.filename: {mol.filename}')
@@ -30,7 +50,17 @@ class TestEMSclass:
         assert mol.file == Xfile
         assert mol.filename == Xfilename
         assert mol.stringfile == Xstringfile
-        assert mol.stringfile == mol.file
+
+    
+    # @pytest.mark.parametrize('mol', smiles_mol_list)
+    # def test_smiles_filenames(self, mol, request):
+    #     mol = request.getfixturevalue(mol)
+    #     print(f'EMS.file: {mol.file}')
+    #     print(f'EMS.id: {mol.id}')
+    #     print(f'EMS.filename: {mol.filename}')
+    #     print(f'EMS.stringfile: {mol.stringfile}')
+    #     print(mol.xyz)
+    #     assert True
 
 
     # def test_check_Zcoords_zero(self, testmol_1):
