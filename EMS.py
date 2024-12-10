@@ -47,7 +47,9 @@ class EMS(object):
         else:
             self.id = mol_id
 
-        if streamlit and not line_notation:
+        if line_notation:
+            self.filename = file
+        elif streamlit and not line_notation:
             self.filename = file.name
         elif rdkit_mol:
             self.filename = mol_id
@@ -67,6 +69,7 @@ class EMS(object):
             self.stringfile = file
 
         # initialize the molecular structure and properties as empty
+        self.rdmol = None
         self.type = None
         self.xyz = None
         self.conn = None                   # self.conn is the bond order matrix of the molecule
@@ -85,13 +88,24 @@ class EMS(object):
         # get the rdmol object from the file
         if line_notation:
             if line_notation == "smi":
-                self.rdmol = Chem.MolFromSmiles(file)
+                try:
+                    line_mol = Chem.MolFromSmiles(file)
+                except Exception as e:
+                    print(f"Wrong SMILES string: {file}")
+
             elif line_notation == "smarts":
-                self.rdmol = Chem.MolFromSmarts(file)
+                try:
+                    line_mol = Chem.MolFromSmarts(file)
+                except Exception as e:
+                    print(f"Wrong SMARTS string: {file}")
+
             else:
                 raise ValueError(f"Line notation, {line_notation}, not supported")
             
-            self.rdmol = Chem.AddHs(self.rdmol)
+            Chem.SanitizeMol(line_mol)
+            line_mol = Chem.AddHs(line_mol)
+            Chem.Kekulize(line_mol)
+            self.rdmol = line_mol
             AllChem.EmbedMolecule(self.rdmol)              # obtain the initial 3D structure for a molecule
 
         elif rdkit_mol:
@@ -237,11 +251,19 @@ class EMS(object):
 
     def check_valence(self):
         check = True
+        
         for atom in self.rdmol.GetAtoms():
-            # if Chem.rdchem.HasValenceViolation(atom) == True:
-            if atom.HasValenceViolation() == True:
+            try:
+                # If the RDKit molecule is not sanitized, the ImplicitValence function will raise an exception
+                atom.GetImplicitValence()
+            except Exception as e:
+                print(f"Molecule {self.filename} might not be sanitized!")
+                raise e
+        
+            if atom.GetImplicitValence() != 0:
                 check = False
                 break
+            
         return check
 
     def check_Zcoords_zero(self):
