@@ -4,11 +4,16 @@ sys.path.append('/user/home/rv22218/work/inv_IMPRESSION/EMS')
 import EMS as ems
 from rdkit import Chem
 import pytest
+import numpy as np
 
-mol_list = ['testmol_sdf_1', 
+mol_list = ['testmol_sdf_1',
+            'testmol_sdf_WrongValence', 
             'testmol_xyz',
-            'testmol_smiles_asym',
+            'testmol_smiles_sym',
             'testmol_rdmol']
+
+symmetric_mol_list = ['testmol_sdf_1',
+                      'testmol_smiles_sym']
 
 class TestEMSclass:
     def setup_method(self, method):
@@ -21,36 +26,62 @@ class TestEMSclass:
 
     @pytest.mark.parametrize('mol', mol_list)
     def test_filenames(self, mol, request):
+
+        # Test file reading
         if 'smiles' in mol:
-            mol = request.getfixturevalue(mol)
-            Xfile = mol.file
+            emol = request.getfixturevalue(mol)
+            Xfile = emol.file
             Xfilename = Xfile
             Xstringfile = Xfile
             Xid = Xfile
-            assert mol.id == Xid
+            assert emol.id == Xid
         
         elif 'rdmol' in mol:
-            mol = request.getfixturevalue(mol)
+            emol = request.getfixturevalue(mol)
             Xfile = None
             Xfilename = None
             Xstringfile = None
             Xid = None
 
         else:
-            mol = request.getfixturevalue(mol)
-            Xfile = mol.file
+            emol = request.getfixturevalue(mol)
+            Xfile = emol.file
             Xfilename = Xfile.split('/')[-1]
             Xstringfile = Xfile
 
-        print(f'EMS.file: {mol.file}')
-        print(f'EMS.id: {mol.id}')
-        print(f'EMS.filename: {mol.filename}')
-        print(f'EMS.stringfile: {mol.stringfile}')
+        print(f'EMS.file: {emol.file}')
+        print(f'EMS.id: {emol.id}')
+        print(f'EMS.filename: {emol.filename}')
+        print(f'EMS.stringfile: {emol.stringfile}')
         
-        assert mol.file == Xfile
-        assert mol.filename == Xfilename
-        assert mol.stringfile == Xstringfile
-        assert type(mol.rdmol) == Chem.rdchem.Mol
+        assert emol.file == Xfile
+        assert emol.filename == Xfilename
+        assert emol.stringfile == Xstringfile
+        assert type(emol.rdmol) == Chem.rdchem.Mol
+
+        # test valence check
+        print(f'EMS.pass_valence_check: {emol.pass_valence_check}')
+        if 'WrongValence' in mol:
+            assert emol.pass_valence_check == False
+        else:
+            assert emol.pass_valence_check == True
+        
+        # test property reading
+        print(f'EMS.type: {emol.type}')
+        print(f'EMS.xyz: {emol.xyz}')
+        print(f'EMS.conn: {emol.conn}')
+        print(f'EMS.mol_properties["SMILES"]: {emol.mol_properties["SMILES"]}')
+        assert type(emol.type) == np.ndarray
+        assert type(emol.xyz) == np.ndarray
+        assert type(emol.conn) == np.ndarray
+        assert type(emol.mol_properties["SMILES"]) == str
+
+        # test symmetry
+        print(f'EMS.symmetric: {emol.symmetric}')
+        if mol in symmetric_mol_list:
+            assert emol.symmetric == True
+        else:
+            assert emol.symmetric == False
 
 
 

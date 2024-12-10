@@ -33,7 +33,7 @@ class EMS(object):
         nmr=False,                 # whether to read NMR data from SDF files
         streamlit=False,        # streamlit mode is used to read the file from ForwardSDMolSupplier
         fragment=False,
-        max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
+        max_atoms=1e6,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
         
         # To initialize self.id, self.filename, self.file and self.stringfile
@@ -80,7 +80,8 @@ class EMS(object):
         self.atom_properties = {}
         self.pair_properties = {}
         self.mol_properties = {}
-        self.flat = False
+        self.flat = None
+        self.symmetric = None
         self.max_atoms = max_atoms
         self.streamlit = streamlit
         self.fragment = fragment
@@ -92,12 +93,14 @@ class EMS(object):
                     line_mol = Chem.MolFromSmiles(file)
                 except Exception as e:
                     print(f"Wrong SMILES string: {file}")
+                    raise e
 
             elif line_notation == "smarts":
                 try:
                     line_mol = Chem.MolFromSmarts(file)
                 except Exception as e:
                     print(f"Wrong SMARTS string: {file}")
+                    raise e
 
             else:
                 raise ValueError(f"Line notation, {line_notation}, not supported")
@@ -164,18 +167,16 @@ class EMS(object):
         # check if every atom in the molecule has a correct valence
         self.pass_valence_check = self.check_valence()
 
-        if self.pass_valence_check:
-            # get the molecular structure and properties
-            self.type, self.xyz, self.conn = from_rdmol(self.rdmol)         # self.conn is the bond order matrix of the molecule
-            self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
-            self.path_topology, self.path_distance = self.get_graph_distance()
-            self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
-            self.symmetric = self.check_symmetric()                         # check if the non-hydrogen backbone of the molecule is symmetric
+        # get the molecular structure and properties
+        self.type, self.xyz, self.conn = from_rdmol(self.rdmol)        # self.conn is the bond order matrix of the molecule
+        self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
+        self.path_topology, self.path_distance = self.get_graph_distance()
+        self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
+        self.symmetric = self.check_symmetric()               # check if the non-hydrogen backbone of the molecule is symmetric
 
-            # raise an error if the number of atoms in the molecule is greater than the maximum number of atoms allowed
-            if self.max_atoms < len(self.type):
-                # raise ValueError(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
-                print(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
+        if self.max_atoms < len(self.type):
+            print(f"Number of atoms in molecule {self.filename} is greater than the maximum number of atoms allowed")
+
 
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
@@ -262,11 +263,15 @@ class EMS(object):
         
             if atom.GetImplicitValence() != 0:
                 check = False
+                print(f"Valence check failed for molecule {self.filename}")
+                print(f"Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
                 break
             
         return check
 
-    def check_Zcoords_zero(self):
+    def check_Zcoords_zero_old(self):
+        # !!!Old version of check_Zcoords_zero method
+ 
         # If the Z coordinates are all zero, the molecule is flat and return True
         # Otherwise, if there is at least one non-zero Z coordinate, return False
         if self.streamlit:
@@ -300,6 +305,7 @@ class EMS(object):
                 return True
 
     def check_symmetric(self):
+        # This method is not for checking 3D symmetry, but for checking the symmetry of the 2D non-hydrogen backbone of the molecule
         mol = copy.deepcopy(self.rdmol)
         Chem.RemoveStereochemistry(mol)
         mol = Chem.rdmolops.RemoveAllHs(mol)
@@ -475,7 +481,7 @@ class EMS(object):
             return shift_array, shift_var, coupling_array, coupling_var
 
     def get_graph_distance(self):
-        return Chem.GetDistanceMatrix(self.rdmol), Chem.Get3DDistanceMatrix(self.rdmol)
+        return Chem.GetDistanceMatrix(self.rdmol).astype(int), Chem.Get3DDistanceMatrix(self.rdmol)
 
     def get_coupling_types(self) -> None:
         """

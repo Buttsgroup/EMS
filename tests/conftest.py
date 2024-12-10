@@ -23,6 +23,18 @@ def testmol_sdf_1():
     print('Tearing down SDF molecule testmol_sdf_1 (scope: module)')
 
 @pytest.fixture(scope='module')
+def testmol_sdf_WrongValence():
+    mol_file = 'imp_dsgdb9nsd_074000.nmredata.sdf'
+    mol_id = mol_file.split('.')[0]
+    path = os.path.join(test_mol_dir, mol_file)
+    print()
+    print('Setting up SDF molecule testmol_sdf_WrongValence (scope: module)')
+    print(f'Mol Path: {path}')
+    yield ems.EMS(path, mol_id=mol_id)
+    print()
+    print('Tearing down SDF molecule testmol_sdf_WrongValence (scope: module)')
+
+@pytest.fixture(scope='module')
 def testmol_xyz():
     mol_file = 'dsgdb9nsd_057135.xyz'
     mol_id = mol_file.split('.')[0]
@@ -35,14 +47,14 @@ def testmol_xyz():
     print('Tearing down XYZF molecule testmol_xyz (scope: module)')
 
 @pytest.fixture(scope='module')
-def testmol_smiles_asym():
+def testmol_smiles_sym():
     smiles = 'CC1([C@@H](N2[C@H](S1)[C@@H](C2=O)NC(=O)CC3=CC=CC=C3)C(=O)O)C'
     print()
-    print('Setting up SMILES molecule testmol_smiles_asym (scope: module)')
+    print('Setting up SMILES molecule testmol_smiles_sym (scope: module)')
     print(f'SMILES string: {smiles}')
     yield ems.EMS(smiles, line_notation='smi')
     print()
-    print('Tearing down SMILES molecule testmol_smiles_asym (scope: module)')
+    print('Tearing down SMILES molecule testmol_smiles_sym (scope: module)')
 
 @pytest.fixture(scope='module')
 def testmol_rdmol():
