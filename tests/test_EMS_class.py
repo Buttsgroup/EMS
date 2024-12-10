@@ -10,10 +10,12 @@ mol_list = ['testmol_sdf_1',
             'testmol_sdf_WrongValence', 
             'testmol_xyz',
             'testmol_smiles_sym',
-            'testmol_rdmol']
+            'testmol_rdmol',
+            'testmol_rdmol_flat']
 
 symmetric_mol_list = ['testmol_sdf_1',
-                      'testmol_smiles_sym']
+                      'testmol_smiles_sym',
+                      'testmol_rdmol_flat']
 
 class TestEMSclass:
     def setup_method(self, method):
@@ -82,6 +84,13 @@ class TestEMSclass:
             assert emol.symmetric == True
         else:
             assert emol.symmetric == False
+
+        # test flat molecule
+        print(f'EMS.flat: {emol.flat}')
+        if 'flat' in mol:
+            assert emol.flat == True
+        else:
+            assert emol.flat == False
 
 
 

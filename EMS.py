@@ -108,8 +108,9 @@ class EMS(object):
             Chem.SanitizeMol(line_mol)
             line_mol = Chem.AddHs(line_mol)
             Chem.Kekulize(line_mol)
+            AllChem.EmbedMolecule(line_mol)              # obtain the initial 3D structure for a molecule
+            AllChem.UFFOptimizeMolecule(line_mol)
             self.rdmol = line_mol
-            AllChem.EmbedMolecule(self.rdmol)              # obtain the initial 3D structure for a molecule
 
         elif rdkit_mol:
             self.rdmol = file
@@ -118,12 +119,6 @@ class EMS(object):
             ftype = self.filename.split(".")[-1]
 
             if ftype == "sdf":
-                if self.check_Zcoords_zero():
-                    self.flat = True
-                    warnings.warn(
-                        f"Warning: {self.id} - All Z coordinates are 0 - Flat flag set to True"
-                    )
-
                 if streamlit:
                     self.rdmol = SDFfile_to_rdmol(self.file, self.filename, streamlit=True)
                 else:
@@ -173,6 +168,7 @@ class EMS(object):
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
         self.symmetric = self.check_symmetric()               # check if the non-hydrogen backbone of the molecule is symmetric
+        self.flat = self.check_Zcoords_zero()               
 
         if self.max_atoms < len(self.type):
             print(f"Number of atoms in molecule {self.filename} is greater than the maximum number of atoms allowed")
@@ -268,6 +264,13 @@ class EMS(object):
                 break
             
         return check
+    
+    def check_Zcoords_zero(self, threshold=1e-3):
+        Z_coords = self.xyz[:, 2]
+        if np.all(abs(Z_coords) < threshold):
+            return True
+        else:
+            return False
 
     def check_Zcoords_zero_old(self):
         # !!!Old version of check_Zcoords_zero method

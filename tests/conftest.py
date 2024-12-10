@@ -3,6 +3,8 @@ import sys
 import os
 sys.path.append('/user/home/rv22218/work/inv_IMPRESSION/EMS')
 import EMS as ems
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
 test_mol_dir = '/user/home/rv22218/work/inv_IMPRESSION/EMS/tests/test_mols'
 
@@ -68,3 +70,19 @@ def testmol_rdmol():
     yield ems.EMS(RDMol, rdkit_mol=True)
     print()
     print('Tearing down RDMol molecule testmol_rdmol (scope: module)')
+
+@pytest.fixture(scope='module')
+def testmol_rdmol_flat():
+    smiles = 'CC1([C@@H](N2[C@H](S1)[C@@H](C2=O)NC(=O)CC3=CC=CC=C3)C(=O)O)C'
+    rdmol = Chem.MolFromSmiles(smiles)
+    Chem.SanitizeMol(rdmol)
+    rdmol = Chem.AddHs(rdmol)
+    AllChem.EmbedMolecule(rdmol)              # obtain the initial 3D structure for a molecule
+    AllChem.UFFOptimizeMolecule(rdmol)
+    AllChem.Compute2DCoords(rdmol)
+    print()
+    print('Setting up 2D RDMol molecule testmol_rdmol_flat (scope: module)')
+    print(f'SMILES string: {smiles}')
+    yield ems.EMS(rdmol, rdkit_mol=True)
+    print()
+    print('Tearing down 2D RDMol molecule testmol_rdmol_flat (scope: module)')
