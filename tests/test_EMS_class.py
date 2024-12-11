@@ -7,13 +7,15 @@ import pytest
 import numpy as np
 
 mol_list = ['testmol_sdf_1',
-            'testmol_sdf_WrongValence', 
+            'testmol_sdf_WrongValence',
+            'testmol_sdf_ReadNMR_1', 
             'testmol_xyz',
             'testmol_smiles_sym',
             'testmol_rdmol',
             'testmol_rdmol_flat']
 
 symmetric_mol_list = ['testmol_sdf_1',
+                      'testmol_sdf_ReadNMR_1',
                       'testmol_smiles_sym',
                       'testmol_rdmol_flat']
 
@@ -91,6 +93,16 @@ class TestEMSclass:
             assert emol.flat == True
         else:
             assert emol.flat == False
+        
+        # test NMR reading
+        if 'NMR' in mol:
+            print(f'EMS.pair_properties["nmr_types"]: {emol.pair_properties["nmr_types"]}')
+            print(f'EMS.atom_properties["shift"]: {emol.atom_properties["shift"]}')
+            print(f'EMS.pair_properties["coupling"]: {emol.pair_properties["coupling"]}')
+            assert type(emol.pair_properties["nmr_types"]) == list
+            assert type(emol.atom_properties["shift"]) == np.ndarray
+            assert type(emol.pair_properties["coupling"]) == np.ndarray
+        
 
 
 

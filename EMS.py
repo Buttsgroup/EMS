@@ -157,7 +157,7 @@ class EMS(object):
 
         # check if self.rdmol is the correct type
         if not isinstance(self.rdmol, Chem.rdchem.Mol):
-            raise ValueError(f"File {self.file} not read correctly")
+            raise TypeError(f"File {self.file} not read correctly")
 
         # check if every atom in the molecule has a correct valence
         self.pass_valence_check = self.check_valence()
@@ -171,7 +171,41 @@ class EMS(object):
         self.flat = self.check_Zcoords_zero()               
 
         if self.max_atoms < len(self.type):
-            print(f"Number of atoms in molecule {self.filename} is greater than the maximum number of atoms allowed")
+            print(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
+
+        if nmr:
+            try:
+                self.filename.split(".")[-2]
+            except Exception as e:
+                raise ValueError(f'Wrong NMR file format for molecule {self.id}')
+            
+            if self.filename.split(".")[-2] != "nmredata":
+                raise ValueError(f'Wrong NMR file format for molecule {self.id}')
+            else:
+                self.get_coupling_types()     # Generate self.pair_properties["nmr_types"]
+                shift, shift_var, coupling, coupling_vars = self.nmr_read()
+                self.atom_properties["shift"] = shift
+                self.atom_properties["shift_var"] = shift_var
+                self.pair_properties["coupling"] = coupling
+                self.pair_properties["coupling_var"] = coupling_vars
+                if len(self.atom_properties["shift"]) != len(self.type):
+                    raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
+
+
+
+            # try:
+            #     self.get_coupling_types()     # Generate self.pair_properties["nmr_types"]
+                
+            #     if self.filename.split(".")[-2] == "nmredata":
+            #         shift, shift_var, coupling, coupling_vars = self.nmr_read()
+            #         self.atom_properties["shift"] = shift
+            #         self.atom_properties["shift_var"] = shift_var
+            #         self.pair_properties["coupling"] = coupling
+            #         self.pair_properties["coupling_var"] = coupling_vars
+            #         assert len(self.atom_properties["shift"]) == len(self.type)
+            # except Exception as e:
+            #     print(f"Read NMR called but no NMR data found for molecule {self.id}")
+            #     raise e
 
 
         # enter the fragment mode of EMS, to generate molecular fragments
@@ -211,24 +245,6 @@ class EMS(object):
             self.pair_properties['bond_order'] = flatten_pair_properties(self.reduced_conn, self.reduced_edge_index)
 
 
-        # enter the normal mode of EMS
-        elif self.pass_valence_check:
-            self.get_coupling_types()
-
-            if nmr:
-                try:
-                    if self.filename.split(".")[-2] == "nmredata" and nmr:
-                        shift, shift_var, coupling, coupling_vars = self.nmr_read()
-                        self.atom_properties["shift"] = shift
-                        self.atom_properties["shift_var"] = shift_var
-                        self.pair_properties["coupling"] = coupling
-                        self.pair_properties["coupling_var"] = coupling_vars
-                        assert len(self.atom_properties["shift"]) == len(self.type)
-                except:
-                    print(
-                        f"Read NMR called but no NMR data found for molecule {self.id}"
-                    )
-
     def __str__(self):
         return f"EMS({self.id}), {self.mol_properties['SMILES']}"
 
@@ -254,12 +270,12 @@ class EMS(object):
                 # If the RDKit molecule is not sanitized, the ImplicitValence function will raise an exception
                 atom.GetImplicitValence()
             except Exception as e:
-                print(f"Molecule {self.filename} might not be sanitized!")
+                print(f"Molecule {self.id} might not be sanitized!")
                 raise e
         
             if atom.GetImplicitValence() != 0:
                 check = False
-                print(f"Valence check failed for molecule {self.filename}")
+                print(f"Valence check failed for molecule {self.id}")
                 print(f"Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
                 break
             
@@ -351,6 +367,8 @@ class EMS(object):
         return check
 
     def nmr_read(self):
+        #!!!!!! Give a warning when there is no NMR data in the file
+
         if self.streamlit:
             atoms = 0
             for line in self.stringfile:
