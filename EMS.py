@@ -192,22 +192,6 @@ class EMS(object):
                     raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
 
 
-
-            # try:
-            #     self.get_coupling_types()     # Generate self.pair_properties["nmr_types"]
-                
-            #     if self.filename.split(".")[-2] == "nmredata":
-            #         shift, shift_var, coupling, coupling_vars = self.nmr_read()
-            #         self.atom_properties["shift"] = shift
-            #         self.atom_properties["shift_var"] = shift_var
-            #         self.pair_properties["coupling"] = coupling
-            #         self.pair_properties["coupling_var"] = coupling_vars
-            #         assert len(self.atom_properties["shift"]) == len(self.type)
-            # except Exception as e:
-            #     print(f"Read NMR called but no NMR data found for molecule {self.id}")
-            #     raise e
-
-
         # enter the fragment mode of EMS, to generate molecular fragments
         if self.fragment:
             self.edge_index = matrix_to_edge_index(self.adj)
