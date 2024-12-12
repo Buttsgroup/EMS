@@ -8,10 +8,10 @@ from io import StringIO
 import warnings
 import os
 
-from modules.properties.structure_io import from_rdmol, to_rdmol, SDFfile_to_rdmol
-from utils.periodic_table import Get_periodic_table
-from modules.fragment.reduce_hydrogen import *
-from modules.properties.nmr.nmr_io import nmr_read
+from EMS.modules.properties.structure_io import from_rdmol, to_rdmol, SDFfile_to_rdmol
+from EMS.utils.periodic_table import Get_periodic_table
+from EMS.modules.fragment.reduce_hydrogen import *
+from EMS.modules.properties.nmr.nmr_io import nmr_read
 
 from rdkit import Chem
 from rdkit.Chem import AllChem

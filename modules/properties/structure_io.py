@@ -1,7 +1,7 @@
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from utils.periodic_table import Get_periodic_table
+from EMS.utils.periodic_table import Get_periodic_table
 
 
 def from_rdmol(rdmol):

@@ -1,8 +1,6 @@
 import pytest
-import sys
 import os
-sys.path.append('/user/home/rv22218/work/inv_IMPRESSION/EMS')
-import EMS as ems
+import EMS.EMS as ems
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
