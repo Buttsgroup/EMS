@@ -11,7 +11,7 @@ import os
 from EMS.modules.properties.structure_io import from_rdmol, to_rdmol, SDFfile_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.fragment.reduce_hydrogen import *
-from EMS.modules.properties.nmr.nmr_io import nmr_read
+from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -167,15 +167,21 @@ class EMS(object):
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
         self.flat = self.check_Zcoords_zero() 
+        
+        # check if the non-hydrogen backbone of the molecule is symmetric
         try:
-            self.symmetric = self.check_symmetric()               # check if the non-hydrogen backbone of the molecule is symmetric
+            # For molecules having atoms with explicit valences greater than permitted, the symmetry check will give error
+            # In this case, self.symmetric will be set to None
+            self.symmetric = self.check_symmetric()               
         except Exception as e:
             print(f'Symmetry check failed for molecule {self.id}, due to wrong explicit valences greater than permitted')
             print('This error needs to be fixed...')
 
+        # check if the number of atoms in the molecule is greater than the maximum number of atoms allowed
         if self.max_atoms < len(self.type):
             print(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
-
+        
+        # get NMR properties
         if nmr:
             if rdkit_mol:
                 prop_dict = self.rdmol.GetPropsAsDict()
@@ -183,6 +189,7 @@ class EMS(object):
                 try:
                     shift = prop_dict['NMREDATA_ASSIGNMENT']
                     coupling = prop_dict['NMREDATA_J']
+                    shift, shift_var, coupling, coupling_vars = nmr_read_rdmol(shift, coupling)
                 except Exception as e:
                     raise ValueError(f'No NMR data found for molecule {self.id}')
 
@@ -197,12 +204,13 @@ class EMS(object):
                 else:
                     self.get_coupling_types()     # Generate self.pair_properties["nmr_types"]
                     shift, shift_var, coupling, coupling_vars = nmr_read(self.stringfile, self.streamlit)
-                    self.atom_properties["shift"] = shift
-                    self.atom_properties["shift_var"] = shift_var
-                    self.pair_properties["coupling"] = coupling
-                    self.pair_properties["coupling_var"] = coupling_vars
-                    if len(self.atom_properties["shift"]) != len(self.type):
-                        raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
+
+            self.atom_properties["shift"] = shift
+            self.atom_properties["shift_var"] = shift_var
+            self.pair_properties["coupling"] = coupling
+            self.pair_properties["coupling_var"] = coupling_vars
+            if len(self.atom_properties["shift"]) != len(self.type):
+                raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
 
 
         # enter the fragment mode of EMS, to generate molecular fragments
@@ -323,7 +331,6 @@ class EMS(object):
     def check_symmetric(self):
         # This method is not for checking 3D symmetry, but for checking the symmetry of the 2D non-hydrogen backbone of the molecule
         mol = copy.deepcopy(self.rdmol)
-        # Chem.SanitizeMol(mol)
         Chem.RemoveStereochemistry(mol)
         mol = rdmolops.RemoveAllHs(mol)
         canonical_ranking = list(rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))

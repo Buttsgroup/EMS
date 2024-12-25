@@ -133,3 +133,32 @@ def nmr_read(stringfile, streamlit=False):
                     coupling_len[int(items[2])][int(items[0])] = length
 
         return shift_array, shift_var, coupling_array, coupling_var
+    
+def nmr_read_rdmol(shift, coupling):
+    shift_items = []
+    for line in shift.split('\n'):
+        if line:
+            shift_items.append(line.split())
+    
+    coupling_items = []
+    for line in coupling.split('\n'):
+        if line:
+            coupling_items.append(line.split())
+    
+    num_atom = len(shift_items)
+    shift_array = np.zeros(num_atom, dtype=np.float64)
+    shift_var = np.zeros(num_atom, dtype=np.float64)
+    coupling_array = np.zeros((num_atom, num_atom), dtype=np.float64)
+    coupling_var = np.zeros((num_atom, num_atom), dtype=np.float64)
+
+    for item in shift_items:
+        shift_array[int(item[0])] = float(item[2])
+        shift_var[int(item[0])] = float(item[6])
+    
+    for item in coupling_items:
+        coupling_array[int(item[0])][int(item[2])] = float(item[4])
+        coupling_array[int(item[2])][int(item[0])] = float(item[4])
+        coupling_var[int(item[0])][int(item[2])] = float(item[8])
+        coupling_var[int(item[2])][int(item[0])] = float(item[8])
+    
+    return shift_array, shift_var, coupling_array, coupling_var
