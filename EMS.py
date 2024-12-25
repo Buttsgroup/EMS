@@ -195,15 +195,10 @@ class EMS(object):
 
             else:
                 try:
-                    self.filename.split(".")[-2]
-                except Exception as e:
-                    raise ValueError(f'Wrong NMR file format for molecule {self.id}')
-                
-                if self.filename.split(".")[-2] != "nmredata":
-                    raise ValueError(f'Wrong NMR file format for molecule {self.id}')
-                else:
                     self.get_coupling_types()     # Generate self.pair_properties["nmr_types"]
                     shift, shift_var, coupling, coupling_vars = nmr_read(self.stringfile, self.streamlit)
+                except Exception as e:
+                    raise ValueError(f'Fail to read NMR data for molecule {self.id} from file {self.stringfile}')
 
             self.atom_properties["shift"] = shift
             self.atom_properties["shift_var"] = shift_var
