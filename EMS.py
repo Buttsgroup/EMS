@@ -174,6 +174,7 @@ class EMS(object):
             # In this case, self.symmetric will be set to None
             self.symmetric = self.check_symmetric()               
         except Exception as e:
+            self.symmetric = 'Error'
             print(f'Symmetry check failed for molecule {self.id}, due to wrong explicit valences greater than permitted')
             print('This error needs to be fixed...')
 
@@ -189,6 +190,7 @@ class EMS(object):
                 try:
                     shift = prop_dict['NMREDATA_ASSIGNMENT']
                     coupling = prop_dict['NMREDATA_J']
+                    self.get_coupling_types()
                     shift, shift_var, coupling, coupling_vars = nmr_read_rdmol(shift, coupling)
                 except Exception as e:
                     raise ValueError(f'No NMR data found for molecule {self.id}')
@@ -275,7 +277,6 @@ class EMS(object):
         
             if atom.GetImplicitValence() != 0:
                 check = False
-                print(f"Valence check failed for molecule {self.id}")
                 print(f"Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
                 break
             

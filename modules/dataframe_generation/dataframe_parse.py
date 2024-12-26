@@ -2,7 +2,7 @@ import pandas as pd
 from tqdm import tqdm
 from EMS.utils.periodic_table import Get_periodic_table
 
-def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
+def make_atoms_df(ems_list, write=False, format="pickle"):
     p_table = Get_periodic_table()
 
     # construct dataframes
@@ -37,15 +37,18 @@ def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
             conns.append(ems.conn[t])
             smiles.append(ems.mol_properties["SMILES"])
             for p, prop in enumerate(ems.atom_properties.keys()):
-                if prop == 'shift' and atom_list == 'all':
-                    atom_props[p].append(ems.atom_properties[prop][t])
-                elif prop == 'shift' and atom_list != 'all':
-                    if p_table[type] in atom_list:
-                        atom_props[p].append(ems.atom_properties[prop][t])
-                    else:
-                        atom_props[p].append(0.0)
-                else:
-                    atom_props[p].append(ems.atom_properties[prop][t])
+                atom_props[p].append(ems.atom_properties[prop][t])
+
+            # for p, prop in enumerate(ems.atom_properties.keys()):
+            #     if prop == 'shift' and atom_list == 'all':
+            #         atom_props[p].append(ems.atom_properties[prop][t])
+            #     elif prop == 'shift' and atom_list != 'all':
+            #         if p_table[type] in atom_list:
+            #             atom_props[p].append(ems.atom_properties[prop][t])
+            #         else:
+            #             atom_props[p].append(0.0)
+            #     else:
+            #         atom_props[p].append(ems.atom_properties[prop][t])
 
     # Construct dataframe
     atoms = {
@@ -91,7 +94,7 @@ def make_atoms_df(ems_list, atom_list='all', write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, coupling_list='all', write=False, max_pathlen=6):
+def make_pairs_df(ems_list, write=False, max_pathlen=6):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -123,15 +126,18 @@ def make_pairs_df(ems_list, coupling_list='all', write=False, max_pathlen=6):
                 path_len.append(int(ems.path_topology[t][t2]))
                 bond_existence.append(ems.adj[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
-                    if prop == 'coupling' and coupling_list == 'all':
-                        pair_props[p].append(ems.pair_properties[prop][t][t2])
-                    elif prop == 'coupling' and coupling_list != 'all':
-                        if ems.pair_properties['nmr_types'][t][t2] in coupling_list:
-                            pair_props[p].append(ems.pair_properties[prop][t][t2])
-                        else:
-                            pair_props[p].append(0.0)
-                    else:
-                        pair_props[p].append(ems.pair_properties[prop][t][t2])
+                    pair_props[p].append(ems.pair_properties[prop][t][t2])
+
+                # for p, prop in enumerate(ems.pair_properties.keys()):
+                #     if prop == 'coupling' and coupling_list == 'all':
+                #         pair_props[p].append(ems.pair_properties[prop][t][t2])
+                #     elif prop == 'coupling' and coupling_list != 'all':
+                #         if ems.pair_properties['nmr_types'][t][t2] in coupling_list:
+                #             pair_props[p].append(ems.pair_properties[prop][t][t2])
+                #         else:
+                #             pair_props[p].append(0.0)
+                #     else:
+                #         pair_props[p].append(ems.pair_properties[prop][t][t2])
 
     # Construct dataframe
     pairs = {
