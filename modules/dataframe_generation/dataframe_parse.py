@@ -94,7 +94,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, write=False, max_pathlen=6):
+def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -156,6 +156,11 @@ def make_pairs_df(ems_list, write=False, max_pathlen=6):
     pbar.close()
 
     if write:
-        pairs.to_pickle(f"{write}/pairs.pkl")
+        if format == "csv":
+            pairs.to_csv(f"{write}/pairs.csv")
+        elif format == "pickle":
+            pairs.to_pickle(f"{write}/pairs.pkl")
+        elif format == "parquet":
+            pairs.to_parquet(f"{write}/pairs.parquet")
     else:
         return pairs

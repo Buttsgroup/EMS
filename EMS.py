@@ -22,25 +22,43 @@ import openbabel.pybel as pyb
 
 
 class EMS(object):
+    """
+    The EMS class is the main class for the EMS package. It reads the molecular structure and properties from a file and transforms it to an emol object.
+    The file type includes but not limited to SDF, XYZ, SMILES/SMARTS strings, and rdkit molecule objects.
+
+    Args:
+        file (str): The file path of the molecule file. If the molecule file is a SMILES/SMARTS string, the file is the string.
+            If the molecule is an rdkit molecule, the file is the rdkit molecule object.
+        mol_id (str): The customarized molecule id. The file name is preferred.
+        line_notation (str): If the molecule file is a SMILES/SMARTS string, the line_notation is 'smi' or 'smarts'. Default: None.
+        rdkit_mol (bool): Whether to read the file as an rdkit molecule. Default: False.
+        nmr (bool): Whether to read NMR data. Default: False.
+        streamlit (bool): Whether to read the file from ForwardSDMolSupplier. Default: False.
+        fragment (bool): Whether to read molecular fragments. Default: False.
+        max_atoms (int): The maximum number of atoms in a molecule. If the molecule has less atoms than this number, the extra atoms are dumb atoms.
+            This max_atoms argument is used with fragment. Default: 1e6.
+    
+    More details about the EMS class can be found in the comments below.
+    """
 
     def __init__(
         self,
-        file,                      # file path
+        file,                      # File path
         mol_id=None,               # Customarized molecule id
         line_notation=None,        # 'smi' or 'smarts'
-        rdkit_mol=False,           # whether to read the file as an rdkit molecule
-        nmr=False,                 # whether to read NMR data from SDF files
-        streamlit=False,        # streamlit mode is used to read the file from ForwardSDMolSupplier
-        fragment=False,
-        max_atoms=1e6,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
+        rdkit_mol=False,           # Whether to read the file as an rdkit molecule
+        nmr=False,                 # Whether to read NMR data
+        streamlit=False,           # Streamlit mode is used to read the file from ForwardSDMolSupplier
+        fragment=False,            # Whether to read molecular fragments
+        max_atoms=1e6,             # Maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
         
         # To initialize self.id, self.filename, self.file and self.stringfile
-        # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
-        # if the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
-        # if the molecule file is neither SMILES/SMARTS string or streamlit, like .sdf file, self.id is the customarized 'mol_id' name, 
-        # self.file and self.stringfile are the file path, and self.filename is the file name, simplified from the file path
-        # if the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customarized 'mol_id' name
+        # (1) If the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
+        # (2) If the molecule file is streamlit, self.id is the customarized 'mol_id' name, and self.filename, self.file and self.stringfile are achieved from the 'file' object
+        # (3) If the molecule file is neither SMILES/SMARTS string or streamlit, like .sdf file, self.id is the customarized 'mol_id' name, 
+        #     self.file and self.stringfile are the file path, and self.filename is the file name, simplified from the file path
+        # (4) If the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customarized 'mol_id' name
         if line_notation:
             self.id = file
         else:
@@ -67,25 +85,26 @@ class EMS(object):
         else:
             self.stringfile = file
 
-        # initialize the molecular structure and properties as empty
-        self.rdmol = None
-        self.type = None
-        self.xyz = None
-        self.conn = None                   # self.conn is the bond order matrix of the molecule
-        self.adj = None                    # self.adj is the adjacency matrix of the molecule
+        # Initialize the molecular structure and properties as empty
+        self.rdmol = None                  # The rdkit molecule object of the molecule
+        self.type = None                   # The atomic numbers of the atoms in the molecule. Shape: (n_atoms,)
+        self.xyz = None                    # The 3D coordinates of the molecule. Shape: (n_atoms, 3)
+        self.conn = None                   # The bond order matrix of the molecule. Shape: (n_atoms, n_atoms)
+        self.adj = None                    # The adjacency matrix of the molecule. Shape: (n_atoms, n_atoms)
         self.path_topology = None          # Path length between atoms
         self.path_distance = None          # 3D distance between atoms
-        self.bond_existence = None         # whether a bond exists between two atoms, made up of 0 or 1
+        self.bond_existence = None         # Whether a bond exists between two atoms, made up of 0 or 1
         self.atom_properties = {}
         self.pair_properties = {}
         self.mol_properties = {}
-        self.flat = None
-        self.symmetric = None
-        self.max_atoms = max_atoms
+        self.flat = None                   # Whether all the Z coordinates of the molecule is zero
+        self.symmetric = None              # Whether the non-hydrogen backbone of the molecule is symmetric
+        self.max_atoms = max_atoms         
         self.streamlit = streamlit
         self.fragment = fragment
 
         # get the rdmol object from the file
+        # If the molecule file is a SMILES/SMARTS string, the rdmol object is generated from the string
         if line_notation:
             if line_notation == "smi":
                 try:
@@ -108,12 +127,14 @@ class EMS(object):
             line_mol = Chem.AddHs(line_mol)
             Chem.Kekulize(line_mol)
             AllChem.EmbedMolecule(line_mol)              # obtain the initial 3D structure for a molecule
-            AllChem.UFFOptimizeMolecule(line_mol)
+            AllChem.UFFOptimizeMolecule(line_mol)        # optimize the 3D structure of a molecule
             self.rdmol = line_mol
-
+        
+        # If the molecule file is an rdkit molecule, the rdmol object is the molecule itself
         elif rdkit_mol:
             self.rdmol = file
  
+        # If the molecule is saved in a file, the rdmol object is generated from the file
         else:
             ftype = self.filename.split(".")[-1]
 
@@ -124,7 +145,7 @@ class EMS(object):
                     self.rdmol = SDFfile_to_rdmol(self.file, self.filename, streamlit=False)
 
             elif ftype == "xyz":
-                tmp_file = '_tmp.sdf'
+                tmp_file = f'_tmp_{self.filename}.sdf'
                 obmol = next(pyb.readfile('xyz', self.file))
                 obmol.write('sdf', tmp_file, overwrite=True)
                 self.rdmol = SDFfile_to_rdmol(tmp_file, self.filename, streamlit=False)
@@ -154,35 +175,35 @@ class EMS(object):
             else:
                 raise ValueError(f"File type, {ftype} not supported")
 
-        # check if self.rdmol is the correct type
+        # Check if self.rdmol is read correctly from the file as an rdkit molecule object
         if not isinstance(self.rdmol, Chem.rdchem.Mol):
             raise TypeError(f"File {self.file} not read correctly")
 
-        # check if every atom in the molecule has a correct valence
+        # Check if every atom in the molecule has a correct valence
         self.pass_valence_check = self.check_valence()
 
-        # get the molecular structure and properties
-        self.type, self.xyz, self.conn = from_rdmol(self.rdmol)        # self.conn is the bond order matrix of the molecule
-        self.adj = Chem.GetAdjacencyMatrix(self.rdmol)                  # self.adj is the adjacency matrix of the molecule
+        # Get the molecular structures
+        self.type, self.xyz, self.conn = from_rdmol(self.rdmol)
+        self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
         self.flat = self.check_Zcoords_zero() 
         
-        # check if the non-hydrogen backbone of the molecule is symmetric
+        # Check if the non-hydrogen backbone of the molecule is symmetric
         try:
             # For molecules having atoms with explicit valences greater than permitted, the symmetry check will give error
-            # In this case, self.symmetric will be set to None
+            # In this case, self.symmetric will be set to 'Error'
             self.symmetric = self.check_symmetric()               
         except Exception as e:
             self.symmetric = 'Error'
             print(f'Symmetry check failed for molecule {self.id}, due to wrong explicit valences greater than permitted')
             print('This error needs to be fixed...')
 
-        # check if the number of atoms in the molecule is greater than the maximum number of atoms allowed
+        # Check if the number of atoms in the molecule is greater than the maximum number of atoms allowed
         if self.max_atoms < len(self.type):
             print(f"Number of atoms in molecule {self.id} is greater than the maximum number of atoms allowed")
         
-        # get NMR properties
+        # Get NMR properties
         if nmr:
             if rdkit_mol:
                 prop_dict = self.rdmol.GetPropsAsDict()
@@ -210,7 +231,7 @@ class EMS(object):
                 raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
 
 
-        # enter the fragment mode of EMS, to generate molecular fragments
+        # Enter the fragment mode of EMS to generate molecular fragments
         if self.fragment:
             self.edge_index = matrix_to_edge_index(self.adj)
 
