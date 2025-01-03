@@ -286,6 +286,12 @@ class EMS(object):
         )
 
     def check_valence(self):
+        """
+        Check if every atom in the molecule has a correct valence.
+        If any atom in the molecule has a wrong implicit valence, check_valence will give a False.
+        RDkit will sometimes give an error if the molecule is not 'suitably' sanitized. In this case, this function will raise an exception.
+        """
+
         check = True
         
         for atom in self.rdmol.GetAtoms():
@@ -304,6 +310,11 @@ class EMS(object):
         return check
     
     def check_Zcoords_zero(self, threshold=1e-3):
+        """
+        Check if all the Z coordinates of the molecule are zero. 
+        If all the Z coordinates are zero, the molecule is flat and check_Zcoords_zero will give a True.
+        """
+
         Z_coords = self.xyz[:, 2]
         if np.all(abs(Z_coords) < threshold):
             return True
@@ -311,7 +322,10 @@ class EMS(object):
             return False
 
     def check_Zcoords_zero_old(self):
-        # !!!Old version of check_Zcoords_zero method
+        """
+        This is an old version of check_Zcoords_zero method.
+        Abandoned!!!
+        """
  
         # If the Z coordinates are all zero, the molecule is flat and return True
         # Otherwise, if there is at least one non-zero Z coordinate, return False
@@ -346,6 +360,11 @@ class EMS(object):
                 return True
 
     def check_symmetric(self):
+        """
+        Check if the non-hydrogen backbone of the molecule is symmetric. 
+        Attention: This method is not for checking 3D symmetry, but only the 2D non-hydrogen backbone.
+        """
+
         # This method is not for checking 3D symmetry, but for checking the symmetry of the 2D non-hydrogen backbone of the molecule
         mol = copy.deepcopy(self.rdmol)
         Chem.RemoveStereochemistry(mol)
@@ -358,6 +377,10 @@ class EMS(object):
             return True
         
     def check_semi_symmetric(self, atom_type_threshold={}):
+        """
+        If two non-hydrogen atoms of the same atom type have a chemical shift difference less than a threshold, the molecule is semi-symmetric.
+        Attention!!! This method is abandoned and not used in the current version of EMS.
+        """
         symmetric = False
 
         chemical_shift_df = pd.DataFrame({
@@ -377,6 +400,14 @@ class EMS(object):
         return symmetric
     
     def check_atom_type_number(self, atom_type_number_threshold={}):
+        """
+        Check if the number of atoms of some atom types in the molecule is less than a threshold.
+
+        Example:
+            atom_type_number_threshold = {6: 3, 7: 2}
+            This means that the molecule should have <= 3 carbon atoms and <= 2 nitrogen atoms.
+        """
+
         check = True
         atom_types = self.type.tolist()
 
@@ -389,15 +420,22 @@ class EMS(object):
         return check
 
     def get_graph_distance(self):
+        """
+        Get the path length matrix and 3D distance matrix.
+        The path length matrix is the shortest path length between atoms. Shape: (n_atoms, n_atoms)
+        The 3D distance matrix is the 3D distance between atoms. Shape: (n_atoms, n_atoms)
+        """
+
         return Chem.GetDistanceMatrix(self.rdmol).astype(int), Chem.Get3DDistanceMatrix(self.rdmol)
 
     def get_coupling_types(self) -> None:
         """
-        Function for generating all the coupling types for all atom-pair interactions, stores internally in pair_properties attributes.
+        Get the coupling type matrix and save in self.pair_properties["nmr_types"]. shape: (n_atoms, n_atoms)
 
-        :param aemol: Type, aemol class to generate coupling types for
-        :return: None
+        Example:
+            If two atoms (carbon and nitrogen) are 4 bonds away, the coupling type is '4JCN'.
         """
+
         p_table = Get_periodic_table()
 
         if self.path_topology is None:
@@ -427,6 +465,3 @@ class EMS(object):
             cpl_types.append(tmp_types)
 
         self.pair_properties["nmr_types"] = cpl_types
-
-    def convert_to_rdmol(self):
-        self.rdmol = to_rdmol(self)
