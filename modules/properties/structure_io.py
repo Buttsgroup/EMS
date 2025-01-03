@@ -83,6 +83,6 @@ def SDFfile_to_rdmol(file_path, filename, streamlit=False):
     
     for mol in SDMolMethod(file_path, removeHs=False, sanitize=False):
         if mol is not None:
-            if not mol.GetProp("_Name"):
-                mol.SetProp("_Name", filename)
+            if not mol.GetProp("FILENAME"):
+                mol.SetProp("FILENAME", filename)
             return mol
