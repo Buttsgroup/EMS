@@ -176,25 +176,22 @@ class EMS(object):
         if not isinstance(self.rdmol, Chem.rdchem.Mol):
             raise TypeError(f"File {self.file} not read correctly")
 
-        # Check if every atom in the molecule has a correct valence
-        self.pass_valence_check = self.check_valence()
-
         # Get the molecular structures
         self.type, self.xyz, self.conn = from_rdmol(self.rdmol)
         self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
         self.flat = self.check_Zcoords_zero() 
+
+        # Check if every atom in the molecule has a correct valence
+        # If any atom in the molecule has a wrong implicit valence, self.pass_valence_check will be set to False
+        # If there is any error when calling the self.check_valence() function, self.pass_valence_check will be set to 'Error'
+        self.pass_valence_check = self.check_valence()
         
         # Check if the non-hydrogen backbone of the molecule is symmetric
-        try:
-            # For molecules having atoms with explicit valences greater than permitted, the symmetry check will give error
-            # In this case, self.symmetric will be set to 'Error'
-            self.symmetric = self.check_symmetric()               
-        except Exception as e:
-            self.symmetric = 'Error'
-            print(f'Symmetry check failed for molecule {self.id}, due to wrong explicit valences greater than permitted')
-            print('This error needs to be fixed...')
+        # If there is any error when calling the self.check_symmetric() function, self.symmetric will be set to 'Error'
+        # The error may be caused by wrong explicit valences which are greater than permitted
+        self.symmetric = self.check_symmetric()
 
         # Check if the number of atoms in the molecule is greater than the maximum number of atoms allowed
         if self.max_atoms < len(self.type):
@@ -284,25 +281,49 @@ class EMS(object):
 
     def check_valence(self):
         """
-        Check if every atom in the molecule has a correct valence.
-        If any atom in the molecule has a wrong implicit valence, check_valence will give a False.
-        RDkit will sometimes give an error if the molecule is not 'suitably' sanitized. In this case, this function will raise an exception.
+        Check whether the molecule has correct valence.
+        If any of the following conditions is met, the molecule has a wrong valence and check_valence will give a False:
+        (1) The function Chem.MolFromSmiles raises an error when reading the SMILES string of the molecule
+        (2) The function Chem.MolFromSmiles returns None when reading the SMILES string of the molecule
+        (3) The molecule is not a single molecule, but a mixture of molecules, which is indicated by '.' in the SMILES string
+        (4) The RDKit atom method GetImplicitValence() raises an error when reading the implicit valence of the atom
+        (5) The implicit valence of one atom is not zero
+
+        The cause of (4) may be that the molecule is not 'suitably' sanitized.
         """
 
         check = True
+
+        # Check if the function Chem.MolFromSmiles works when reading the SMILES string of the molecule
+        try:
+            smiles_mol = Chem.MolFromSmiles(self.mol_properties["SMILES"])
+        except:
+            print(f"Function Chem.MolFromSmiles raises error when reading SMILES string of molecule {self.id}")
+            return False
         
+        # Check if the molecule can be read by RDKit from its SMILES string
+        if smiles_mol is None:
+            print(f"Molecule {self.id} cannot be read by RDKit from its SMILES string")
+            return False
+        
+        # Check if the molecule is a single molecule not a mixture of molecules by checking if there is '.' in the SMILES string
+        if '.' in self.mol_properties["SMILES"]:
+            print(f"Molecule {self.id} is not a single molecule, but a mixture of molecules")
+            return False
+        
+        # Check if every atom in the molecule has a correct implicit valence
         for atom in self.rdmol.GetAtoms():
+            # If the RDKit molecule is not sanitized, the GetImplicitValence function will raise an error
             try:
-                # If the RDKit molecule is not sanitized, the ImplicitValence function will raise an exception
                 atom.GetImplicitValence()
             except Exception as e:
-                print(f"Molecule {self.id} might not be sanitized!")
-                raise e
-        
+                print(f"Molecule {self.id} cannot read its implicit valence, which may caused by not being sanitized!")
+                return False
+
+            # List the atoms with wrong implicit valence
             if atom.GetImplicitValence() != 0:
                 check = False
-                print(f"Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
-                break
+                print(f"Molecule {self.id}: Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
             
         return check
     
@@ -362,16 +383,21 @@ class EMS(object):
         Attention: This method is not for checking 3D symmetry, but only the 2D non-hydrogen backbone.
         """
 
-        # This method is not for checking 3D symmetry, but for checking the symmetry of the 2D non-hydrogen backbone of the molecule
-        mol = copy.deepcopy(self.rdmol)
-        Chem.RemoveStereochemistry(mol)
-        mol = rdmolops.RemoveAllHs(mol)
-        canonical_ranking = list(rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))
+        try:
+            mol = copy.deepcopy(self.rdmol)
+            Chem.RemoveStereochemistry(mol)
+            mol = rdmolops.RemoveAllHs(mol)
+            canonical_ranking = list(rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))
+            
+            if len(canonical_ranking) == len(set(canonical_ranking)):
+                return False
+            else:
+                return True
         
-        if len(canonical_ranking) == len(set(canonical_ranking)):
-            return False
-        else:
-            return True
+        except Exception as e:
+            print(f'Symmetry check failed for molecule {self.id}, due to wrong explicit valences which are greater than permitted')
+            print('This error needs to be fixed...')
+            return 'Error'
         
     def check_semi_symmetric(self, atom_type_threshold={}):
         """
