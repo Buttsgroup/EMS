@@ -184,8 +184,8 @@ class EMS(object):
         self.flat = self.check_Zcoords_zero() 
 
         # Check if every atom in the molecule has a correct valence
-        # If any atom in the molecule has a wrong implicit valence, self.pass_valence_check will be set to False
-        # If there is any error when calling the self.check_valence() function, self.pass_valence_check will be set to 'Error'
+        # If any atom in the molecule has a wrong implicit valence or there is any error when calling the self.check_valence() function,
+        # self.pass_valence_check will be set to False
         self.pass_valence_check = self.check_valence()
         
         # Check if the non-hydrogen backbone of the molecule is symmetric
