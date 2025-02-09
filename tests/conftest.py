@@ -64,7 +64,7 @@ def testmol_smiles_sym():
     print()
     print('Setting up SMILES molecule testmol_smiles_sym (scope: module)')
     print(f'SMILES string: {smiles}')
-    yield ems.EMS(smiles, line_notation='smi')
+    yield ems.EMS(smiles, line_notation='smiles')
     print()
     print('Tearing down SMILES molecule testmol_smiles_sym (scope: module)')
 
