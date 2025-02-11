@@ -3,10 +3,12 @@ import numpy as np
 import copy
 from io import StringIO
 import logging
-import os
 import sys
+from datetime import date
+import random
+import string
 
-from EMS.modules.properties.structure_io import from_rdmol, sdf_to_rdmol, xyz_to_rdmol
+from EMS.modules.properties.structure_io import from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol
 
@@ -288,17 +290,17 @@ class EMS(object):
         try:
             smiles_mol = Chem.MolFromSmiles(self.mol_properties["SMILES"])
         except:
-            print(f"Function Chem.MolFromSmiles raises error when reading SMILES string of molecule {self.id}")
+            logger.error(f"Function Chem.MolFromSmiles raises error when reading SMILES string of molecule {self.id}")
             return False
         
         # Check if the molecule can be read by RDKit from its SMILES string
         if smiles_mol is None:
-            print(f"Molecule {self.id} cannot be read by RDKit from its SMILES string")
+            logger.warning(f"Molecule {self.id} cannot be read by RDKit from its SMILES string")
             return False
         
         # Check if the molecule is a single molecule not a mixture of molecules by checking if there is '.' in the SMILES string
         if '.' in self.mol_properties["SMILES"]:
-            print(f"Molecule {self.id} is not a single molecule, but a mixture of molecules")
+            logger.warning(f"Molecule {self.id} is not a single molecule, but a mixture of molecules")
             return False
         
         # Check if every atom in the molecule has a correct implicit valence
@@ -307,13 +309,13 @@ class EMS(object):
             try:
                 atom.GetImplicitValence()
             except Exception as e:
-                print(f"Molecule {self.id} cannot read its implicit valence, which may caused by not being sanitized!")
+                logger.error(f"Molecule {self.id} cannot read its implicit valence, which may caused by not being sanitized!")
                 return False
 
             # List the atoms with wrong implicit valence
             if atom.GetImplicitValence() != 0:
                 check = False
-                print(f"Molecule {self.id}: Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
+                logger.error(f"Molecule {self.id}: Atom {atom.GetSymbol()}, index {atom.GetIdx()}, has wrong implicit valence")
             
         return check
     
@@ -385,8 +387,8 @@ class EMS(object):
                 return True
         
         except Exception as e:
-            print(f'Symmetry check failed for molecule {self.id}, due to wrong explicit valences which are greater than permitted')
-            print('This error needs to be fixed...')
+            logger.error(f'Symmetry check fails for molecule {self.id}, due to wrong explicit valences which are greater than permitted')
+            logger.info('Symmetry check failure due to wrong explicit valences needs to be fixed...')
             return 'Error'
         
     def check_semi_symmetric(self, atom_type_threshold={}):
@@ -411,26 +413,6 @@ class EMS(object):
                         symmetric = True
         
         return symmetric
-    
-    def check_atom_type_number(self, atom_type_number_threshold={}):
-        """
-        Check if the number of atoms of some atom types in the molecule is less than a threshold.
-
-        Example:
-            atom_type_number_threshold = {6: 3, 7: 2}
-            This means that the molecule should have <= 3 carbon atoms and <= 2 nitrogen atoms.
-        """
-
-        check = True
-        atom_types = self.type.tolist()
-
-        for atom_type in atom_type_number_threshold:
-            threshold = atom_type_number_threshold[atom_type]
-            if atom_types.count(atom_type) > threshold:
-                check = False
-                break
-
-        return check
 
     def get_graph_distance(self):
         """
@@ -438,8 +420,12 @@ class EMS(object):
         The path length matrix is the shortest path length between atoms. Shape: (n_atoms, n_atoms)
         The 3D distance matrix is the 3D distance between atoms. Shape: (n_atoms, n_atoms)
         """
-
-        return Chem.GetDistanceMatrix(self.rdmol).astype(int), Chem.Get3DDistanceMatrix(self.rdmol)
+        
+        try:
+            return Chem.GetDistanceMatrix(self.rdmol).astype(int), Chem.Get3DDistanceMatrix(self.rdmol)
+        except Exception as e:
+            logger.error(f"Fail to get the path length matrix and 3D distance matrix for molecule {self.id}")
+            raise e
 
     def get_coupling_types(self) -> None:
         """
@@ -478,3 +464,130 @@ class EMS(object):
             cpl_types.append(tmp_types)
 
         self.pair_properties["nmr_types"] = cpl_types
+
+    def to_sdf(self, outfile, FileComments='', prop_to_write='all', SDFversion="V3000"):
+        """
+        Write the emol object to an SDF file with assigned properties.
+        The first line is the SDF file name, which is defaulted to the _Name property of the RDKit molecule. If the _Name property is empty, self.id will be used.
+        The second line is the SDF file information, which is defaulted to 'EMS (Efficient Molecular Storage) - <year> - ButtsGroup'.
+        The third line is the SDF file comments, which is defaulted to blank.
+        The properties to write to the SDF file and the SDF version can be customized.
+        V3000 is default and V2000 is not recommended for molecules with more than 99 atoms. If the atom number is greater than 999, V3000 will be used.
+
+        Args:
+        - outfile (str): The file path to save the SDF file. If outfile is None or blank string "", the SDF block will be returned.
+        - FileComments (str): The comments to write to the third line of the SDF file.
+        - prop_to_write (str or list): The properties to write to the SDF file. If prop_to_write is None, no property will be written.
+            If prop_to_write is "all", all the properties of the RDKit molecule will be written.
+            If prop_to_write is "nmr", only the NMR properties (NMREDATA_ASSIGNMENT and NMREDATA_J) will be written.
+        - SDFversion (str): The version of the SDF file. The version can be "V2000" or "V3000".
+        """
+        
+        # Deep copy the rdmol object
+        rdmol = copy.deepcopy(self.rdmol)
+
+        # Get the _Name property of the RDKit molecule to write to the first line of the SDF file. If the _Name property is empty, set it to the emol id.
+        try:
+            rdmol_Name = rdmol.GetProp("_Name")
+            if rdmol_Name.strip() == "":
+                if self.id is None:
+                    rdmol_Name = ""
+                else:
+                    rdmol_Name = self.id
+        except:
+            logger.warning(f"Fail to get the _Name property of the RDKit molecule. The molecule id will be used instead.")
+            if self.id is None:
+                rdmol_Name = ""
+            else:
+                rdmol_Name = self.id
+
+        # Get the _MolFileInfo property of the RDKit molecule to write to the second line of the SDF file.
+        rdmol_MolFileInfo = f'EMS (Efficient Molecular Storage) - {date.today().year} - ButtsGroup'
+
+        # Get the _MolFileComments property of the RDKit molecule to write to the third line of the SDF file.
+        rdmol_MolFileComments = FileComments
+
+        # Set the name of the temporary SDF file to save the RDKit molecule
+        characters = string.ascii_letters + string.digits  
+        random_string = ''.join(random.choices(characters, k=30))
+        tmp_sdf_file = f"tmp_{random_string}.sdf"
+
+        # Set the SDF file version according to the atom number of the RDKit molecule
+        atom_num = len(self.type)
+        SDFversion = SDFversion
+
+        if SDFversion == "V2000":
+            logger.info(f"V2000 is not recommended for molecules with more than 99 atoms for the sake of failed reading. Please use V3000 instead.")
+
+            if atom_num > 999:
+                logger.error(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
+                SDFversion = "V3000"
+
+            elif atom_num > 99:
+                logger.warning(f"V2000 may cause reading failure for molecules with more than 99 atoms. Please use V3000 instead.")
+            
+            else:
+                logger.info(f"V2000 is being used for molecules with less than 100 atoms.")
+        
+        elif SDFversion == "V3000":
+            logger.info(f"V3000 is being used.")
+        
+        else:
+            logger.error(f"SDF version {SDFversion} is not supported. SDF version is set to V3000.")
+            SDFversion = "V3000"
+        
+        # Set the properties to write to the SDF file
+        prop_to_write = prop_to_write
+        origin_prop = list(rdmol.GetPropsAsDict().keys())
+
+        if prop_to_write is None:
+            prop_to_write = []
+        
+        elif prop_to_write == "all":
+            prop_to_write = origin_prop
+        
+        elif prop_to_write == "nmr":
+            prop_to_write = ["NMREDATA_ASSIGNMENT", "NMREDATA_J"]
+        
+        elif type(prop_to_write) != list:
+            logger.error(f"The roperty to write: {prop_to_write}, is not supported. All original properties will be written to the SDF file.")
+            prop_to_write = origin_prop
+        
+        prop_to_delete = list(set([prop for prop in origin_prop if prop not in prop_to_write]))
+    
+        # Get the SDF block of the RDKit molecule
+        block = rdmol_to_sdf_block(rdmol, rdmol_Name, rdmol_MolFileInfo, rdmol_MolFileComments, tmp_sdf_file, prop_to_delete=prop_to_delete, SDFversion=SDFversion)
+
+        # Write the SDF block to the SDF file
+        if outfile is None or outfile.strip() == "":
+            return block
+        else:
+            with open(outfile, "w") as f:
+                f.write(block)
+
+            
+
+            
+
+        
+
+        
+
+
+
+
+
+
+
+
+
+
+
+
+        # try:
+        #     w = Chem.SDWriter(outfile)
+        #     w.write(self.rdmol)
+        #     w.close()
+        # except Exception as e:
+        #     logger.error(f"Fail to write the emol object to SDF file: {outfile}")
+        #     raise e
