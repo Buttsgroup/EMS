@@ -6,6 +6,8 @@ import os
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem.rdDetermineBonds import DetermineBonds
+from rdkit.Chem.rdchem import BondType
+
 from EMS.utils.periodic_table import Get_periodic_table
 
 
@@ -91,47 +93,169 @@ def emol_to_rdmol(ems_mol, sanitize=True):
     return rdmol
 
 
-def sdf_to_rdmol(file_path, mol_id, streamlit=False):
+def sdf_to_rdmol(file_path, mol_id, addHs=False, kekulize=True, streamlit=False):
+
+    # Leave space for streamlit for future use
     if streamlit:
-        SDMolMethod = Chem.ForwardSDMolSupplier
-    else:
-        SDMolMethod = Chem.SDMolSupplier
+        pass
+
+    # Check whether the file is a V3000 or V2000 sdf file
+    with open(file_path, 'r') as f:
+        file = f.read()
+        block = file.split('$$$$\n')[0]
+        block = block + '$$$$\n'
     
-    for mol in SDMolMethod(file_path, removeHs=False, sanitize=False):
-        if mol is not None:
-            # This section aims to set the _Name property for the molecule
-            # The _Name property is chosen in the following order if not blank: mol.GetProp("_Name"), mol.GetProp("FILENAME"), mol_id
+    # Get the SDF version
+    SDFversion = None
+    if 'V3000' in block:
+        SDFversion = "V3000"
+    elif 'V2000' in block:
+        SDFversion = "V2000"
+    
+    if SDFversion is None:
+        logger.error(f"Invalid sdf file: {file_path}. No SDF version found.")
+        raise ValueError(f"Invalid sdf file: {file_path}. No SDF version found.")
+    
+    # Get the number of atoms in the SDF molecule
+    num_atoms = 0
+    for mol in Chem.ForwardSDMolSupplier(file_path, removeHs=False, sanitize=False):
+        try:
+            Chem.SanitizeMol(mol)
+            mol = Chem.AddHs(mol)
+        except Exception as e:
+            logger.error(f"Fail to read the molecule by ForwardSDMolSupplier in the sdf file: {file_path}")
+            raise e
+        
+        num_atoms = mol.GetNumAtoms()
+        break
 
-            # Get the molecule name from the _Name property
+    if num_atoms == 0:
+        logger.error(f"Fail to read the number of atoms in the sdf file: {file_path}")
+        raise ValueError(f"Fail to read the number of atoms in the sdf file: {file_path}")
+    
+    # Decide whether to read SDF molecule by SDMolSupplier or manually, based on the SDF version and the number of atoms
+    # If the SDF version is V2000 and the number of atoms is larger than 999, the SDF file is invalid
+    if SDFversion == "V2000" and num_atoms > 999:
+        logger.error(f"Invalid V2000 sdf file: {file_path}. The number of atoms is larger than 999.")
+        raise ValueError(f"Invalid V2000 sdf file: {file_path}. The number of atoms is larger than 999.")
+    
+
+    # If the SDF version is V2000 and the number of atoms is > 99 but < 1000, read the SDF molecule manually
+    elif SDFversion == "V2000" and num_atoms > 99:
+        # Get the index of the line including 'V2000' in the sdf block
+        block_lines = block.split('\n')
+        version_line_idx = [i for i, line in enumerate(block_lines) if "V2000" in line][0]
+        
+        # Get the number of atoms and bonds
+        try:
+            atom_num = int(block_lines[version_line_idx][0:3].strip())
+            bond_num = int(block_lines[version_line_idx][3:6].strip())
+
+        except Exception as e:
+            logger.error(f"Fail to read the number of atoms and bonds in the sdf file: {file_path}")
+            raise e
+
+        # Get the atom block and bond block
+        atom_lines = block_lines[version_line_idx + 1: version_line_idx + 1 + atom_num]
+        bond_lines = block_lines[version_line_idx + 1 + atom_num: version_line_idx + 1 + atom_num + bond_num]
+
+        # Get the atomic symbols and coordinates in the atom block
+        try:
+            x = [float(line[0:10].strip()) for line in atom_lines]
+            y = [float(line[10:20].strip()) for line in atom_lines]
+            z = [float(line[20:30].strip()) for line in atom_lines]
+            atomic_symbols = [line[31:34].strip() for line in atom_lines]
+            xyz = list(zip(x, y, z))
+
+        except Exception as e:
+            logger.error(f"Fail to read the coordinates in the sdf file: {file_path}")
+            raise e
+        
+        # Get the bond indices and bond orders in the bond block
+        try:
+            idx_1 = [int(line[0:3].strip()) for line in bond_lines]
+            idx_2 = [int(line[3:6].strip()) for line in bond_lines]
+            bond_indices = list(zip(idx_1, idx_2))  
+
+            BondType_dict = {1: BondType.SINGLE, 2: BondType.DOUBLE, 3: BondType.TRIPLE, 4: BondType.AROMATIC}
+            bond_order = [int(line[6:9].strip()) for line in bond_lines]
+            bond_order = [BondType_dict[i] for i in bond_order]
+
+        except Exception as e:
+            logger.error(f"Fail to read the bonds in the sdf file: {file_path}")
+            raise e
+        
+        # Create an RDKit molecule object and add atoms and bonds to the molecule
+        mol = Chem.RWMol()
+        conf = Chem.Conformer(atom_num)
+
+        atom_indices = []
+        for i, (atom, coord) in enumerate(zip(atomic_symbols, xyz)):
+            rd_atom = Chem.Atom(atom)
+            idx = mol.AddAtom(rd_atom)
+            conf.SetAtomPosition(idx, coord)
+            atom_indices.append(idx)
+        
+        for (idx1, idx2), bond in zip(bond_indices, bond_order):
+            mol.AddBond(idx1-1, idx2-1, bond)
+
+        mol.AddConformer(conf)
+        mol = mol.GetMol()
+
+        # Add hydrogens to the molecule
+        try:
+            Chem.SanitizeMol(mol)
+            mol = Chem.AddHs(mol)
+        except Exception as e:
+            logger.error(f"Fail to sanitize and add hydrogens to the molecule in the sdf file: {file_path}")
+            raise e
+
+        # Sanitize the molecule and kekulize the molecule
+        if kekulize:
             try:
-                NameProp = mol.GetProp("_Name")
-            except:
-                NameProp = None
-                logger.warning(f"Fail to read _Name property in {file_path}")
-            
-            if type(NameProp) == str:
-                NameProp = NameProp.strip()
+                Chem.Kekulize(mol)
+            except Exception as e:
+                logger.warning(f"Fail to kekulize the molecule in the sdf file: {file_path}. Return the unkekulized molecule.")
+        
+        return mol
+    
 
-            # Get the molecule name from the FILENAME property
-            try:
-                filename = mol.GetProp("FILENAME")
-            except:
-                filename = None
-                logger.warning(f"FILENAME property not found in {file_path}")
+    else:
+        for mol in Chem.SDMolSupplier(file_path, removeHs=False, sanitize=False):
+            if mol is not None:
+                # This section aims to set the _Name property for the molecule
+                # The _Name property is chosen in the following order if not blank: mol.GetProp("_Name"), mol.GetProp("FILENAME"), mol_id
 
-            if type(filename) == str:
-                filename = filename.strip()
-            
-            # Set the _Name property for the molecule according to the following order: NameProp, filename, mol_id
-            name_order = [NameProp, filename, mol_id]
-            name_order = [i for i in name_order if i is not None or i != ""]
-            
-            if len(name_order) == 0:
-                mol.SetProp("_Name", None)
-            else:
-                mol.SetProp("_Name", name_order[0])
-            
-            return mol
+                # Get the molecule name from the _Name property
+                try:
+                    NameProp = mol.GetProp("_Name")
+                except:
+                    NameProp = None
+                    logger.warning(f"Fail to read _Name property in {file_path}")
+                
+                if type(NameProp) == str:
+                    NameProp = NameProp.strip()
+
+                # Get the molecule name from the FILENAME property
+                try:
+                    filename = mol.GetProp("FILENAME")
+                except:
+                    filename = None
+                    logger.warning(f"FILENAME property not found in {file_path}")
+
+                if type(filename) == str:
+                    filename = filename.strip()
+                
+                # Set the _Name property for the molecule according to the following order: NameProp, filename, mol_id
+                name_order = [NameProp, filename, mol_id]
+                name_order = [i for i in name_order if i is not None or i != ""]
+                
+                if len(name_order) == 0:
+                    mol.SetProp("_Name", None)
+                else:
+                    mol.SetProp("_Name", name_order[0])
+                
+                return mol   
         
 
 def xyz_to_rdmol(file_path, sanitize=True):
@@ -259,24 +383,6 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_
 
 
      
-
-
-
-
-    # # Get periodic table
-    # periodic_table = Get_periodic_table()
-
-    # # Get the number of atoms and bonds in the emol object
-    # num_bond = int(np.sum(emol.adj > 0) / 2)
-    # num_atom = len(emol.type)
-
-    # # Add the title line to the sdf file
-    # lines = []
-    # lines.append(outfile.split('/')[-1].split('.')[0])
-
-    # # Add the file information and comments to the sdf file in the second and third lines
-    # lines.append(f'EMS (Efficient Molecular Storage) - {date.today().year} - ButtsGroup')
-    # lines.append(comment)
 
 
 

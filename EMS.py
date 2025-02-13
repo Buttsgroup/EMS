@@ -164,10 +164,9 @@ class EMS(object):
         else:
             ftype = self.filename.split(".")[-1]
             
-            # !!!!!! Need to consider how to read .sdf streamlit file 
             if ftype == "sdf":
                 if streamlit:
-                    self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=True)
+                    self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=True)     # Leave the streamlit mode blank for future use
                 else:
                     self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=False)
 
@@ -564,30 +563,3 @@ class EMS(object):
         else:
             with open(outfile, "w") as f:
                 f.write(block)
-
-            
-
-            
-
-        
-
-        
-
-
-
-
-
-
-
-
-
-
-
-
-        # try:
-        #     w = Chem.SDWriter(outfile)
-        #     w.write(self.rdmol)
-        #     w.close()
-        # except Exception as e:
-        #     logger.error(f"Fail to write the emol object to SDF file: {outfile}")
-        #     raise e
