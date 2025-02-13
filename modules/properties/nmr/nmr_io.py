@@ -18,8 +18,9 @@ def nmr_read(stringfile, streamlit=False):
     This function is used to read NMR data from an SDF file. When reading NMR data for an EMS object, the SDF file is the self.stringfile attribute.
     It reads the SDF file line by line and extracts the NMR data from the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> properties in the SDF file.
     Details of this function:
-    (1) This function loops over the lines of the SDF file only once, so as to minimize the time taken to read the NMR data.
-    (2) This function first reads the info line of the SDF file to get the number of atoms in the molecule ('V2000' line in V2000 SDF, or 'M  V30 COUNTS' line in V3000 SDF),
+    (1) This function is designed to read NMR data from both V2000 and V3000 SDF files.
+    (2) This function loops over the lines of the SDF file only once, so as to minimize the time taken to read the NMR data.
+    (3) This function first reads the info line of the SDF file to get the number of atoms in the molecule ('V2000' line in V2000 SDF, or 'M  V30 COUNTS' line in V3000 SDF),
         and then reads the structure block to get the number of atom lines (before 'M  END' line). If the two numbers are not equal, an error will be raised.
 
     Args:

@@ -93,17 +93,42 @@ def emol_to_rdmol(ems_mol, sanitize=True):
     return rdmol
 
 
-def sdf_to_rdmol(file_path, mol_id, addHs=False, kekulize=True, streamlit=False):
+def sdf_to_rdmol(file_path, mol_id, manual_read=False, sanitize=False, addHs=False, kekulize=True, streamlit=False):
+    '''
+    This function is used to read an sdf file and convert it to an RDKit molecule object.
+    There are two modes to read the sdf file: by manual read and by Chem.ForwardSDMolSupplier.
+    The manual read mode is only used for V2000 version SDF files. 
+    It reads the SDF file line by line and manually adds atoms and bonds to the RDKit molecule, which is an alternative way when the Chem.ForwardSDMolSupplier mode fails.
+    The Chem.ForwardSDMolSupplier mode is the recommended way to read the sdf file, which is usually more stable and efficient.
+
+    You can also choose whether to sanitize the molecule, add hydrogens to the molecule, and kekulize the molecule.
+    !!! Attention !!! If you are reading the NMR data from the sdf file, please set sanitize=False and addHs=False.
+    Otherwise, there may be some extra hydrogens added to the molecule, which are not included in the NMR data.
+
+    Args:
+    - file_path (str): The path to the sdf file.
+    - mol_id (str): The id of the molecule, which is customized by the user.
+    - manual_read (bool): Whether to read the sdf molecule manually or by Chem.ForwardSDMolSupplier. 
+        If True, the function will read the sdf file line by line and manually add atoms and bonds to the RDKit molecule.
+        If False, the function will read the sdf file by Chem.ForwardSDMolSupplier, which is the recommended way.
+        Currently, the manual_read mode is only used for V2000 version SDF files.
+    - sanitize (bool): Whether to sanitize the molecule after reading the sdf file.
+        If you are reading the NMR data from the sdf file, please set sanitize=False.
+    - addHs (bool): Whether to add hydrogens to the molecule after reading the sdf file.
+        If you are reading the NMR data from the sdf file, please set addHs=False.
+    - kekulize (bool): Whether to kekulize the molecule after reading the sdf file.
+    - streamlit (bool): Whether to read the molecule in the streamlit mode. Currently, the streamlit mode is not supported yet.
+    '''
 
     # Leave space for streamlit for future use
     if streamlit:
+        logger.info("Streamlit is not supported yet. Turn to the normal mode.")
         pass
 
-    # Check whether the file is a V3000 or V2000 sdf file
+    # Get the first molecule block in the sdf file in case the file includes multiple molecules
     with open(file_path, 'r') as f:
         file = f.read()
         block = file.split('$$$$\n')[0]
-        block = block + '$$$$\n'
     
     # Get the SDF version
     SDFversion = None
@@ -120,19 +145,17 @@ def sdf_to_rdmol(file_path, mol_id, addHs=False, kekulize=True, streamlit=False)
     num_atoms = 0
     for mol in Chem.ForwardSDMolSupplier(file_path, removeHs=False, sanitize=False):
         try:
-            Chem.SanitizeMol(mol)
-            mol = Chem.AddHs(mol)
+            num_atoms = mol.GetNumAtoms()
+            break
         except Exception as e:
             logger.error(f"Fail to read the molecule by ForwardSDMolSupplier in the sdf file: {file_path}")
             raise e
-        
-        num_atoms = mol.GetNumAtoms()
-        break
 
     if num_atoms == 0:
         logger.error(f"Fail to read the number of atoms in the sdf file: {file_path}")
         raise ValueError(f"Fail to read the number of atoms in the sdf file: {file_path}")
     
+
     # Decide whether to read SDF molecule by SDMolSupplier or manually, based on the SDF version and the number of atoms
     # If the SDF version is V2000 and the number of atoms is larger than 999, the SDF file is invalid
     if SDFversion == "V2000" and num_atoms > 999:
@@ -140,17 +163,24 @@ def sdf_to_rdmol(file_path, mol_id, addHs=False, kekulize=True, streamlit=False)
         raise ValueError(f"Invalid V2000 sdf file: {file_path}. The number of atoms is larger than 999.")
     
 
-    # If the SDF version is V2000 and the number of atoms is > 99 but < 1000, read the SDF molecule manually
-    elif SDFversion == "V2000" and num_atoms > 99:
+    rdmol = None
+    # Enter the mode of reading the SDF molecule manually, but only for V2000 version
+    if manual_read:
+        if SDFversion == "V3000":
+            logger.error(f"The V3000 version SDF is not supported in manual read mode: {file_path}.")
+            raise ValueError(f"The V3000 version SDF is not supported in manual read mode: {file_path}.")
+
         # Get the index of the line including 'V2000' in the sdf block
         block_lines = block.split('\n')
         version_line_idx = [i for i, line in enumerate(block_lines) if "V2000" in line][0]
+
+        # Get the file name for the molecule
+        mol_name = block_lines[0]
         
         # Get the number of atoms and bonds
         try:
             atom_num = int(block_lines[version_line_idx][0:3].strip())
             bond_num = int(block_lines[version_line_idx][3:6].strip())
-
         except Exception as e:
             logger.error(f"Fail to read the number of atoms and bonds in the sdf file: {file_path}")
             raise e
@@ -160,26 +190,19 @@ def sdf_to_rdmol(file_path, mol_id, addHs=False, kekulize=True, streamlit=False)
         bond_lines = block_lines[version_line_idx + 1 + atom_num: version_line_idx + 1 + atom_num + bond_num]
 
         # Get the atomic symbols and coordinates in the atom block
+        # xyz_atomic_symbols includes: ((x, y, z), atomic_symbol)
         try:
-            x = [float(line[0:10].strip()) for line in atom_lines]
-            y = [float(line[10:20].strip()) for line in atom_lines]
-            z = [float(line[20:30].strip()) for line in atom_lines]
-            atomic_symbols = [line[31:34].strip() for line in atom_lines]
-            xyz = list(zip(x, y, z))
+            xyz_atomic_symbols = [((float(line[0:10].strip()), float(line[10:20].strip()), float(line[20:30].strip())), line[30:34].strip()) for line in atom_lines]
 
         except Exception as e:
             logger.error(f"Fail to read the coordinates in the sdf file: {file_path}")
             raise e
         
         # Get the bond indices and bond orders in the bond block
+        # bond_indices includes: (atom_index1, atom_index2, bond_order)
         try:
-            idx_1 = [int(line[0:3].strip()) for line in bond_lines]
-            idx_2 = [int(line[3:6].strip()) for line in bond_lines]
-            bond_indices = list(zip(idx_1, idx_2))  
-
             BondType_dict = {1: BondType.SINGLE, 2: BondType.DOUBLE, 3: BondType.TRIPLE, 4: BondType.AROMATIC}
-            bond_order = [int(line[6:9].strip()) for line in bond_lines]
-            bond_order = [BondType_dict[i] for i in bond_order]
+            bond_indices = [(int(line[0:3].strip()), int(line[3:6].strip()), BondType_dict[int(line[6:9].strip())]) for line in bond_lines]
 
         except Exception as e:
             logger.error(f"Fail to read the bonds in the sdf file: {file_path}")
@@ -190,74 +213,102 @@ def sdf_to_rdmol(file_path, mol_id, addHs=False, kekulize=True, streamlit=False)
         conf = Chem.Conformer(atom_num)
 
         atom_indices = []
-        for i, (atom, coord) in enumerate(zip(atomic_symbols, xyz)):
+        for coord, atom in xyz_atomic_symbols:
             rd_atom = Chem.Atom(atom)
             idx = mol.AddAtom(rd_atom)
             conf.SetAtomPosition(idx, coord)
             atom_indices.append(idx)
         
-        for (idx1, idx2), bond in zip(bond_indices, bond_order):
+        for idx1, idx2, bond in bond_indices:
             mol.AddBond(idx1-1, idx2-1, bond)
 
+        # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
         mol.AddConformer(conf)
-        mol = mol.GetMol()
 
-        # Add hydrogens to the molecule
-        try:
-            Chem.SanitizeMol(mol)
-            mol = Chem.AddHs(mol)
-        except Exception as e:
-            logger.error(f"Fail to sanitize and add hydrogens to the molecule in the sdf file: {file_path}")
-            raise e
+        # Get the RDKit Mol object. The 'mol' object is an RWMol object for writing atoms and bonds, so we need to get the Mol object.
+        rdmol = mol.GetMol()
 
-        # Sanitize the molecule and kekulize the molecule
-        if kekulize:
-            try:
-                Chem.Kekulize(mol)
-            except Exception as e:
-                logger.warning(f"Fail to kekulize the molecule in the sdf file: {file_path}. Return the unkekulized molecule.")
-        
-        return mol
+        # Set the _Name property for the molecule by the first line in the sdf block
+        rdmol.SetProp("_NAME", mol_name)
+
+
+    # Enter the mode of read the SDF molecule by Chem.ForwardSDMolSupplier
+    else:
+        for mol in Chem.ForwardSDMolSupplier(file_path, removeHs=False, sanitize=sanitize):
+            if mol is not None:
+                rdmol = mol
+                break
+
+
+    # The following section aims to set the _Name property for the molecule.
+    # The _Name property is chosen in the following order if not blank: mol.GetProp("_Name"), mol_id, mol.GetProp("FILENAME").
+    # The _Name property first searches the _Name property in the RDKit molecule object, which is the first line in the sdf block, 
+    # then the customized 'self.id' attribute (mol_id) in the EMS object, and finally the FILENAME property.
+    # The FILENAME property is not a standard property in the RDKit molecule object or the sdf file, but it is used in some sdf files in our lab.
+    # Since the FILENAME property is not a standard property, it is in the lowest priority.
+
+    # Get the molecule name from the _Name property
+    try:
+        NameProp = rdmol.GetProp("_Name")
+    except:
+        NameProp = None
+        logger.info(f"Fail to read _Name property in {file_path}")
+    
+    if type(NameProp) == str:
+        NameProp = NameProp.strip()
+
+    # Get the molecule name from the FILENAME property
+    try:
+        filename = rdmol.GetProp("FILENAME")
+    except:
+        filename = None
+        logger.info(f"FILENAME property not found in {file_path}")
+
+    if type(filename) == str:
+        filename = filename.strip()
+    
+    # Set the _Name property for the molecule according to the following order: NameProp, filename, mol_id
+    name_order = [NameProp, mol_id, filename]
+    name_order = [i for i in name_order if i is not None and i != ""]
+    
+    if len(name_order) == 0:
+        rdmol.SetProp("_Name", '')
+    else:
+        rdmol.SetProp("_Name", name_order[0])
     
 
-    else:
-        for mol in Chem.SDMolSupplier(file_path, removeHs=False, sanitize=False):
-            if mol is not None:
-                # This section aims to set the _Name property for the molecule
-                # The _Name property is chosen in the following order if not blank: mol.GetProp("_Name"), mol.GetProp("FILENAME"), mol_id
+    # Check whether the RDKit molecule object is successfully read
+    if rdmol is None:
+        logger.error(f"Fail to read the molecule in the sdf file: {file_path}")
+        raise ValueError(f"Fail to read the molecule in the sdf file: {file_path}")
 
-                # Get the molecule name from the _Name property
-                try:
-                    NameProp = mol.GetProp("_Name")
-                except:
-                    NameProp = None
-                    logger.warning(f"Fail to read _Name property in {file_path}")
-                
-                if type(NameProp) == str:
-                    NameProp = NameProp.strip()
+    # Sanitize the molecule
+    if sanitize:
+        try:
+            Chem.SanitizeMol(rdmol)
+        except Exception as e:
+            logger.error(f"Fail to sanitize the molecule in the sdf file: {file_path}. Return the unsanitized molecule.")
+            raise e
+    
+    # Add hydrogens to the molecule
+    if addHs:
+        try:
+            rdmol = Chem.AddHs(rdmol)
+        except Exception as e:
+            logger.error(f"Fail to add hydrogens to the molecule in the sdf file: {file_path}")
+            raise e
 
-                # Get the molecule name from the FILENAME property
-                try:
-                    filename = mol.GetProp("FILENAME")
-                except:
-                    filename = None
-                    logger.warning(f"FILENAME property not found in {file_path}")
-
-                if type(filename) == str:
-                    filename = filename.strip()
-                
-                # Set the _Name property for the molecule according to the following order: NameProp, filename, mol_id
-                name_order = [NameProp, filename, mol_id]
-                name_order = [i for i in name_order if i is not None or i != ""]
-                
-                if len(name_order) == 0:
-                    mol.SetProp("_Name", None)
-                else:
-                    mol.SetProp("_Name", name_order[0])
-                
-                return mol   
+    # Sanitize the molecule and kekulize the molecule
+    if kekulize:
+        try:
+            Chem.Kekulize(rdmol)
+        except Exception as e:
+            logger.error(f"Fail to kekulize the molecule in the sdf file: {file_path}.")
+            raise e
+    
+    return rdmol
+    
         
-
 def xyz_to_rdmol(file_path, sanitize=True):
     '''
     This function is used to convert a xyz file to an RDKit molecule object.
