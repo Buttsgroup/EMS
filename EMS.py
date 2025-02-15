@@ -8,7 +8,7 @@ from datetime import date
 import random
 import string
 
-from EMS.modules.properties.structure_io import from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block
+from EMS.modules.properties.structure_io import structure_from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol
 
@@ -49,14 +49,19 @@ class EMS(object):
     The file type includes but not limited to SDF, XYZ, SMILES/SMARTS strings, and rdkit molecule objects.
 
     Args:
-        file (str): The file path of the molecule file. If the molecule file is a SMILES/SMARTS string, the file is the string.
-            If the molecule is an rdkit molecule, the file is the rdkit molecule object.
-        mol_id (str): The customized molecule id. The file name is preferred.
-        line_notation (str): If the molecule file is a SMILES/SMARTS string, the line_notation is 'smiles' or 'smarts'. Default: None.
-        rdkit_mol (bool): Whether to read the file as an rdkit molecule. Default: False.
-        nmr (bool): Whether to read NMR data. Default: False.
-        streamlit (bool): Whether to read the file from ForwardSDMolSupplier. Default: False.
-    
+    - file (str): The file path of the molecule file. If the molecule file is a SMILES/SMARTS string, the file is the string.
+        If the molecule is an rdkit molecule, the file is the rdkit molecule object.
+    - mol_id (str): The customized molecule id. The file name is preferred.
+    - line_notation (str): If the molecule file is a SMILES/SMARTS string, the line_notation is 'smiles' or 'smarts'. Default: None.
+    - rdkit_mol (bool): Whether to read the file as an rdkit molecule. Default: False.
+    - nmr (bool): Whether to read NMR data. Default: False.
+    - streamlit (bool): Whether to read the file from ForwardSDMolSupplier. Default: False.
+    - addHs (bool): Whether to add hydrogens to the rdkit molecule object. Default: False.
+        If you are reading NMR data, addHs should be set to False.
+    - sanitize (bool): Whether to sanitize the rdkit molecule object. Default: False.
+        If you are reading NMR data, sanitize should be set to False.
+    - kekulize (bool): Whether to kekulize the rdkit molecule object. Default: True.
+
     More details about the EMS class can be found in the comments below.
     """
 
@@ -68,6 +73,9 @@ class EMS(object):
         rdkit_mol=False,           # Whether to read the file as an rdkit molecule
         nmr=False,                 # Whether to read NMR data
         streamlit=False,           # Streamlit mode is used to read the file from website
+        addHs=False,               # Whether to add hydrogens to the rdkit molecule object
+        sanitize=False,            # Whether to sanitize the rdkit molecule object
+        kekulize=True,             # Whether to kekulize the rdkit molecule object
     ):
         
         # To initialize self.id, self.filename, self.file and self.stringfile
@@ -118,6 +126,8 @@ class EMS(object):
         self.flat = None                   # Whether all the Z coordinates of the molecule is zero
         self.symmetric = None              # Whether the non-hydrogen backbone of the molecule is symmetric
         self.streamlit = streamlit
+        self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
+        self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
 
         # get the rdmol object from the file
         # If the molecule file is a SMILES/SMARTS string, the rdmol object is generated from the string
@@ -153,7 +163,7 @@ class EMS(object):
                 AllChem.EmbedMolecule(line_mol)              # obtain the initial 3D structure for a molecule
                 self.rdmol = line_mol
             except Exception as e:
-                logger.error(f"Fail to process the rdkit molecule object by RDKit: {file}")
+                logger.error(f"Fail to process the rdkit molecule object transformed from SMILES/SMARTS string by RDKit: {file}")
                 raise e
         
         # If the molecule file is an rdkit molecule, the rdmol object is the molecule itself
@@ -179,12 +189,12 @@ class EMS(object):
 
             elif ftype == "mol2":
                 self.rdmol = Chem.MolFromMol2File(
-                    self.file, removeHs=False, sanitize=False
+                    self.file, removeHs=False, sanitize=self.sanitize
                 )
 
             elif ftype == "mae":
                 for mol in Chem.MaeMolSupplier(
-                    self.file, removeHs=False, sanitize=False
+                    self.file, removeHs=False, sanitize=self.sanitize
                 ):
                     if mol is not None:
                         if mol.GetProp("_Name") is None:
@@ -206,9 +216,33 @@ class EMS(object):
         if not isinstance(self.rdmol, Chem.rdchem.Mol):
             logger.error(f"File {self.file} not read correctly to rdkit molecule object")
             raise TypeError(f"File {self.file} not read correctly to rdkit molecule object")
+        
+        # Add hydrogens to the rdkit molecule object
+        if addHs:
+            try:
+                self.rdmol = Chem.AddHs(self.rdmol)
+            except Exception as e:
+                logger.error(f"Fail to add hydrogens to the rdkit molecule object: {self.id}")
+                raise e
+
+        # Sanitize the rdkit molecule object
+        if self.sanitize:
+            try:
+                Chem.SanitizeMol(self.rdmol)
+            except Exception as e:
+                logger.error(f"Fail to sanitize the rdkit molecule object: {self.id}")
+                raise e
+        
+        # Kekulize the rdkit molecule object
+        if self.kekulize:
+            try:
+                Chem.Kekulize(self.rdmol)
+            except Exception as e:
+                logger.error(f"Fail to kekulize the rdkit molecule object: {self.id}")
+                raise e
 
         # Get the molecular structures
-        self.type, self.xyz, self.conn = from_rdmol(self.rdmol)
+        self.type, self.xyz, self.conn = structure_from_rdmol(self.rdmol)
         self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
@@ -226,30 +260,28 @@ class EMS(object):
         
         # Get NMR properties
         if nmr:
+            self.get_coupling_types()       # Generate self.pair_properties["nmr_types"]
+
             if rdkit_mol:
-                prop_dict = self.rdmol.GetPropsAsDict()
-                
                 try:
-                    shift = prop_dict['NMREDATA_ASSIGNMENT']
-                    coupling = prop_dict['NMREDATA_J']
-                    self.get_coupling_types()
-                    shift, shift_var, coupling, coupling_vars = nmr_read_rdmol(shift, coupling)
+                    shift, shift_var, coupling, coupling_vars = nmr_read_rdmol(self.rdmol, self.id)
                 except Exception as e:
-                    logger.error(f'No NMR data found for molecule {self.id}')
-                    raise ValueError(f'No NMR data found for molecule {self.id}')
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
+                    raise e
 
             else:
                 try:
-                    self.get_coupling_types()     # Generate self.pair_properties["nmr_types"]
                     shift, shift_var, coupling, coupling_vars = nmr_read(self.stringfile, self.streamlit)
                 except Exception as e:
-                    raise ValueError(f'Fail to read NMR data for molecule {self.id} from file {self.stringfile}')
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from file {self.stringfile}')
+                    raise e
 
             self.atom_properties["shift"] = shift
             self.atom_properties["shift_var"] = shift_var
             self.pair_properties["coupling"] = coupling
             self.pair_properties["coupling_var"] = coupling_vars
             if len(self.atom_properties["shift"]) != len(self.type):
+                logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
                 raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
 
 
@@ -330,47 +362,11 @@ class EMS(object):
         else:
             return False
 
-    def check_Zcoords_zero_old(self):
-        """
-        This is an old version of check_Zcoords_zero method.
-        Abandoned!!!
-        """
- 
-        # If the Z coordinates are all zero, the molecule is flat and return True
-        # Otherwise, if there is at least one non-zero Z coordinate, return False
-        if self.streamlit:
-            for line in self.stringfile:
-                # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
-                if len(line.split()) == 12 and line.split()[-1] != 'V2000':
-                    z_coord = float(
-                        line.split()[3]
-                    )  # Assuming the z coordinate is the fourth field
-                    if z_coord != 0:
-                        return False
-            return True
-
-        else:
-            with open(self.stringfile, "r") as f:
-                lines = f.readlines()[2:]
-                coord_flag = False
-                for line in lines:
-                    # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
-                    if 'V2000' in line:
-                        coord_flag = True
-                        continue
-                    if coord_flag and len(line.split()) > 12 and line.split()[3].isalpha():
-                        z_coord = float(
-                            line.split()[2]
-                        )  # Assuming the z coordinate is the fourth field
-                        if abs(z_coord) > 1e-6:
-                            return False
-                    elif coord_flag and len(line.split()) < 12:
-                        break
-                return True
-
     def check_symmetric(self):
         """
         Check if the non-hydrogen backbone of the molecule is symmetric. 
+        If the non-hydrogen backbone is symmetric/asymmetric, check_symmetric will give a False/True.
+        If the method raises an error, check_symmetric will give an 'Error'. 
         Attention: This method is not for checking 3D symmetry, but only the 2D non-hydrogen backbone.
         """
 
@@ -389,29 +385,6 @@ class EMS(object):
             logger.error(f'Symmetry check fails for molecule {self.id}, due to wrong explicit valences which are greater than permitted')
             logger.info('Symmetry check failure due to wrong explicit valences needs to be fixed...')
             return 'Error'
-        
-    def check_semi_symmetric(self, atom_type_threshold={}):
-        """
-        If two non-hydrogen atoms of the same atom type have a chemical shift difference less than a threshold, the molecule is semi-symmetric.
-        Attention!!! This method is abandoned and not used in the current version of EMS.
-        """
-        symmetric = False
-
-        chemical_shift_df = pd.DataFrame({
-            'atom_type': self.type,
-            'shift': self.atom_properties['shift']
-            })
-        
-        for atom_type in atom_type_threshold:
-            threshold = atom_type_threshold[atom_type]
-            atom_type_CS = chemical_shift_df[chemical_shift_df['atom_type'] == atom_type]['shift'].to_list()
-            
-            for i in range(len(atom_type_CS)):
-                for j in range(i+1, len(atom_type_CS)):
-                    if abs(atom_type_CS[i] - atom_type_CS[j]) < threshold:
-                        symmetric = True
-        
-        return symmetric
 
     def get_graph_distance(self):
         """
@@ -516,14 +489,14 @@ class EMS(object):
         SDFversion = SDFversion
 
         if SDFversion == "V2000":
-            logger.info(f"V2000 is not recommended for molecules with more than 99 atoms for the sake of failed reading. Please use V3000 instead.")
+            logger.info(f"V2000 is not recommended for writing molecules. Try using V3000 instead.")
 
             if atom_num > 999:
                 logger.error(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
                 SDFversion = "V3000"
 
             elif atom_num > 99:
-                logger.warning(f"V2000 may cause reading failure for molecules with more than 99 atoms. Please use V3000 instead.")
+                logger.warning(f"V2000 may cause reading failure for molecules with more than 99 atoms. Try using V3000 instead.")
             
             else:
                 logger.info(f"V2000 is being used for molecules with less than 100 atoms.")
@@ -563,3 +536,82 @@ class EMS(object):
         else:
             with open(outfile, "w") as f:
                 f.write(block)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################ The following section includes some abandoned methods of EMS class ################
+
+    # def check_Zcoords_zero_old(self):
+    #     """
+    #     This is an old version of check_Zcoords_zero method.
+    #     Abandoned!!!
+    #     """
+ 
+    #     # If the Z coordinates are all zero, the molecule is flat and return True
+    #     # Otherwise, if there is at least one non-zero Z coordinate, return False
+    #     if self.streamlit:
+    #         for line in self.stringfile:
+    #             # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
+    #             if len(line.split()) == 12 and line.split()[-1] != 'V2000':
+    #                 z_coord = float(
+    #                     line.split()[3]
+    #                 )  # Assuming the z coordinate is the fourth field
+    #                 if z_coord != 0:
+    #                     return False
+    #         return True
+
+    #     else:
+    #         with open(self.stringfile, "r") as f:
+    #             lines = f.readlines()[2:]
+    #             coord_flag = False
+    #             for line in lines:
+    #                 # if re.match(r"^.{10}[^ ]+ [^ ]+ ([^ ]+) ", line):
+    #                 if 'V2000' in line:
+    #                     coord_flag = True
+    #                     continue
+    #                 if coord_flag and len(line.split()) > 12 and line.split()[3].isalpha():
+    #                     z_coord = float(
+    #                         line.split()[2]
+    #                     )  # Assuming the z coordinate is the fourth field
+    #                     if abs(z_coord) > 1e-6:
+    #                         return False
+    #                 elif coord_flag and len(line.split()) < 12:
+    #                     break
+    #             return True
+
+
+
+    # def check_semi_symmetric(self, atom_type_threshold={}):
+    #     """
+    #     If two non-hydrogen atoms of the same atom type have a chemical shift difference less than a threshold, the molecule is semi-symmetric.
+    #     Attention!!! This method is abandoned and not used in the current version of EMS.
+    #     """
+    #     symmetric = False
+
+    #     chemical_shift_df = pd.DataFrame({
+    #         'atom_type': self.type,
+    #         'shift': self.atom_properties['shift']
+    #         })
+        
+    #     for atom_type in atom_type_threshold:
+    #         threshold = atom_type_threshold[atom_type]
+    #         atom_type_CS = chemical_shift_df[chemical_shift_df['atom_type'] == atom_type]['shift'].to_list()
+            
+    #         for i in range(len(atom_type_CS)):
+    #             for j in range(i+1, len(atom_type_CS)):
+    #                 if abs(atom_type_CS[i] - atom_type_CS[j]) < threshold:
+    #                     symmetric = True
+        
+    #     return symmetric

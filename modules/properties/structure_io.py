@@ -2,6 +2,7 @@ import numpy as np
 import logging
 import sys
 import os
+from copy import deepcopy
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -21,19 +22,50 @@ logger.setLevel(logging.INFO)
 ########### Set up the logger system ###########
 
 
-def from_rdmol(rdmol):
+def structure_from_rdmol(mol, kekulize=True):
+    '''
+    This function is used to extract the structure information: atom type, atom coordinates, and bond orders between atoms as arrays from an RDKit molecule object.
+    
+    Args:
+    - rdmol: The RDKit molecule object to extract the structure information.
+    - kekulize (bool): Whether to kekulize the molecule before extracting the structure information.
+        This argument is to prevent an aromatic molecule having a bond order of 1.5, which is not an integer and may cause some problems in assigning bond orders.
+
+    Returns:
+    - type_array (np.ndarray): The array of atom types, which is the atomic number of each atom. The shape is (num_atoms,).
+    - xyz_array (np.ndarray): The array of atom coordinates. The shape is (num_atoms, 3).
+    - conn_array (np.ndarray): The array of bond orders between atoms. The shape is (num_atoms, num_atoms).
+    '''
+
+    rdmol = deepcopy(mol)
+
+    # Kekulize the molecule
+    if kekulize:
+        try:
+            Chem.Kekulize(rdmol)
+        except Exception as e:
+            logger.error(f"Fail to kekulize the molecule.")
+            raise e
+    
+    # Initialze the arrays to store the structure information: atom type, atom coordinates, and bond orders between atoms
     type_array = np.zeros(rdmol.GetNumAtoms(), dtype=np.int32)
     xyz_array = np.zeros((rdmol.GetNumAtoms(), 3), dtype=np.float64)
     conn_array = np.zeros((rdmol.GetNumAtoms(), rdmol.GetNumAtoms()), dtype=np.int32)
-
+    
+    # Loop over the atoms in the molecule
     for i, atoms in enumerate(rdmol.GetAtoms()):
+
+        # Get the atomic number of the atom
         type_array[i] = atoms.GetAtomicNum()
+
+        # Generate conformers for the molecule if there is no conformer and get the atom coordinates from the conformer
         if rdmol.GetNumConformers() < 1:
             AllChem.Compute2DCoords(rdmol)
         xyz_array[i][0] = rdmol.GetConformer(0).GetAtomPosition(i).x
         xyz_array[i][1] = rdmol.GetConformer(0).GetAtomPosition(i).y
         xyz_array[i][2] = rdmol.GetConformer(0).GetAtomPosition(i).z
 
+        # Get the bond orders between atoms
         for j, atoms in enumerate(rdmol.GetAtoms()):
             if i == j:
                 continue
@@ -46,64 +78,13 @@ def from_rdmol(rdmol):
     return type_array, xyz_array, conn_array
 
 
-def from_rdmol_test(rdmol):
-    type_array = np.zeros(rdmol.GetNumAtoms(), dtype=np.int32)
-    for i, atoms in enumerate(rdmol.GetAtoms()):
-        type_array[i] = atoms.GetAtomicNum()
-    if rdmol.GetNumConformers() < 1:
-        AllChem.Compute2DCoords(rdmol)
-    xyz_array = rdmol.GetConformer().GetPositions()
-    conn_array = rdmol.GetAdjacencyMatrix(useBO=True)
-
-    return type_array, xyz_array, conn_array
-
-
-def emol_to_rdmol(ems_mol, sanitize=True):
-    # Create an RDKit molecule object
-    periodic_table = Get_periodic_table()
-    rdmol = Chem.RWMol()
-
-    # Add the atoms to the molecule
-    for atom in ems_mol.type:
-        symbol = periodic_table[int(atom)]
-        rdmol.AddAtom(Chem.Atom(symbol))
-
-    # Add the bonds to the molecule
-    visited = []
-    for i, bond_order_array in enumerate(ems_mol.conn):
-        for j, bond_order in enumerate(bond_order_array):
-            if j in visited:
-                continue
-            elif bond_order != 0:
-                rdmol.AddBond(i, j, Chem.BondType(bond_order))
-            else:
-                continue
-        visited.append(i)
-
-        # Add the coordinates to the atoms
-    conformer = Chem.Conformer()
-    for i, coord in enumerate(ems_mol.xyz):
-        conformer.SetAtomPosition(i, coord)
-    rdmol.AddConformer(conformer)
-
-    rdmol = rdmol.GetMol()
-    # Sanitize the molecule
-    if sanitize:
-        Chem.SanitizeMol(rdmol)
-    return rdmol
-
-
-def sdf_to_rdmol(file_path, mol_id, manual_read=False, sanitize=False, addHs=False, kekulize=True, streamlit=False):
+def sdf_to_rdmol(file_path, mol_id, manual_read=False, streamlit=False):
     '''
     This function is used to read an sdf file and convert it to an RDKit molecule object.
     There are two modes to read the sdf file: by manual read and by Chem.ForwardSDMolSupplier.
     The manual read mode is only used for V2000 version SDF files. 
     It reads the SDF file line by line and manually adds atoms and bonds to the RDKit molecule, which is an alternative way when the Chem.ForwardSDMolSupplier mode fails.
     The Chem.ForwardSDMolSupplier mode is the recommended way to read the sdf file, which is usually more stable and efficient.
-
-    You can also choose whether to sanitize the molecule, add hydrogens to the molecule, and kekulize the molecule.
-    !!! Attention !!! If you are reading the NMR data from the sdf file, please set sanitize=False and addHs=False.
-    Otherwise, there may be some extra hydrogens added to the molecule, which are not included in the NMR data.
 
     Args:
     - file_path (str): The path to the sdf file.
@@ -112,11 +93,6 @@ def sdf_to_rdmol(file_path, mol_id, manual_read=False, sanitize=False, addHs=Fal
         If True, the function will read the sdf file line by line and manually add atoms and bonds to the RDKit molecule.
         If False, the function will read the sdf file by Chem.ForwardSDMolSupplier, which is the recommended way.
         Currently, the manual_read mode is only used for V2000 version SDF files.
-    - sanitize (bool): Whether to sanitize the molecule after reading the sdf file.
-        If you are reading the NMR data from the sdf file, please set sanitize=False.
-    - addHs (bool): Whether to add hydrogens to the molecule after reading the sdf file.
-        If you are reading the NMR data from the sdf file, please set addHs=False.
-    - kekulize (bool): Whether to kekulize the molecule after reading the sdf file.
     - streamlit (bool): Whether to read the molecule in the streamlit mode. Currently, the streamlit mode is not supported yet.
     '''
 
@@ -144,12 +120,13 @@ def sdf_to_rdmol(file_path, mol_id, manual_read=False, sanitize=False, addHs=Fal
     # Get the number of atoms in the SDF molecule
     num_atoms = 0
     for mol in Chem.ForwardSDMolSupplier(file_path, removeHs=False, sanitize=False):
-        try:
-            num_atoms = mol.GetNumAtoms()
-            break
-        except Exception as e:
-            logger.error(f"Fail to read the molecule by ForwardSDMolSupplier in the sdf file: {file_path}")
-            raise e
+        if mol is not None:
+            try:
+                num_atoms = mol.GetNumAtoms()
+                break
+            except Exception as e:
+                logger.error(f"Fail to read the molecule by ForwardSDMolSupplier in the sdf file: {file_path}")
+                raise e
 
     if num_atoms == 0:
         logger.error(f"Fail to read the number of atoms in the sdf file: {file_path}")
@@ -234,7 +211,7 @@ def sdf_to_rdmol(file_path, mol_id, manual_read=False, sanitize=False, addHs=Fal
 
     # Enter the mode of read the SDF molecule by Chem.ForwardSDMolSupplier
     else:
-        for mol in Chem.ForwardSDMolSupplier(file_path, removeHs=False, sanitize=sanitize):
+        for mol in Chem.ForwardSDMolSupplier(file_path, removeHs=False, sanitize=False):
             if mol is not None:
                 rdmol = mol
                 break
@@ -282,42 +259,17 @@ def sdf_to_rdmol(file_path, mol_id, manual_read=False, sanitize=False, addHs=Fal
         logger.error(f"Fail to read the molecule in the sdf file: {file_path}")
         raise ValueError(f"Fail to read the molecule in the sdf file: {file_path}")
 
-    # Sanitize the molecule
-    if sanitize:
-        try:
-            Chem.SanitizeMol(rdmol)
-        except Exception as e:
-            logger.error(f"Fail to sanitize the molecule in the sdf file: {file_path}. Return the unsanitized molecule.")
-            raise e
-    
-    # Add hydrogens to the molecule
-    if addHs:
-        try:
-            rdmol = Chem.AddHs(rdmol)
-        except Exception as e:
-            logger.error(f"Fail to add hydrogens to the molecule in the sdf file: {file_path}")
-            raise e
-
-    # Sanitize the molecule and kekulize the molecule
-    if kekulize:
-        try:
-            Chem.Kekulize(rdmol)
-        except Exception as e:
-            logger.error(f"Fail to kekulize the molecule in the sdf file: {file_path}.")
-            raise e
-    
     return rdmol
     
         
-def xyz_to_rdmol(file_path, sanitize=True):
+def xyz_to_rdmol(file_path):
     '''
-    This function is used to convert a xyz file to an RDKit molecule object.
+    This function is used to convert a xyz file to an RDKit molecule object by reading the xyz file line by line and adding atoms and bonds to the molecule.
     The purpose of writing this function is to avoid the use of RDKit's xyz file reader, which is not stable when reading xyz files.
     Openbabel.pybel is able to read xyz files in a stable way, but the installation of openbabel is not always successful, so we want to avoid using openbabel in EMS package.
 
     Args:
     - file_path (str): The path to the xyz file.
-    - sanitize (bool): Whether to sanitize the molecule after reading the xyz file.
     '''
 
     with open(file_path, 'r') as f:
@@ -365,15 +317,11 @@ def xyz_to_rdmol(file_path, sanitize=True):
         except Exception as e:
             logger.error(f"Fail to determine the bonds by DetermineBonds function in the xyz file: {file_path}")
             raise e
-
-        # Sanitize the molecule. If the molecule cannot be sanitized, return the unsanitized molecule.
-        if sanitize:
-            try:
-                Chem.SanitizeMol(mol)
-            except Exception as e:
-                logger.warning(f"Fail to sanitize the molecule in the xyz file: {file_path}. Return the unsanitized molecule.")
         
-        return mol.GetMol()
+        # Get the RDKit Mol object.
+        mol = mol.GetMol()
+        
+        return mol
     
 
 def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_delete=[], SDFversion="V3000"):
@@ -396,7 +344,7 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_
     - FileInfo (str): The file information of the molecule, referring to the _MolFileInfo property of the RDKit molecule object and the second line in the sdf file.
     - FileComment (str): The file comment of the molecule, referring to the _MolFileComments property of the RDKit molecule object and the third line in the sdf file.
     - tmp_file (str): The path of the temporary sdf file to store the sdf block.
-    - prop_to_delete (list): The list of properties to be deleted from the RDKit molecule object, so that the properties will not be written to the sdf file.
+    - prop_to_delete (list): The list of properties to be deleted from the RDKit molecule object, so that these properties will not be written to the sdf file.
     - SDFversion (str): The version of the sdf file, which can be "V3000" or "V2000".
     '''
 
@@ -433,22 +381,71 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_
 
 
 
+
+
+
+
      
 
 
+################## The following functions are temporarily abandoned ##################
+
+# def emol_to_rdmol(ems_mol):
+#     '''
+#     This function is used to convert an EMS molecule object to an RDKit molecule object.
+#     However, the EMS molecule object itself includes an RDKit molecule object, so this function is not necessary in most cases and temporarily abandoned.
+
+#     Args:
+#     - ems_mol: The EMS molecule object.
+#     '''
+
+#     # Create an RDKit molecule object
+#     periodic_table = Get_periodic_table()
+#     rdmol = Chem.RWMol()
+
+#     # Add the atoms to the molecule
+#     for atom in ems_mol.type:
+#         symbol = periodic_table[int(atom)]
+#         rdmol.AddAtom(Chem.Atom(symbol))
+
+#     # Add the bonds to the molecule
+#     visited = []
+#     for i, bond_order_array in enumerate(ems_mol.conn):
+#         for j, bond_order in enumerate(bond_order_array):
+#             if j in visited:
+#                 continue
+#             elif bond_order != 0:
+#                 rdmol.AddBond(i, j, Chem.BondType(bond_order))
+#             else:
+#                 continue
+#         visited.append(i)
+
+#     # Add the coordinates to the atoms
+#     conformer = Chem.Conformer()
+#     for i, coord in enumerate(ems_mol.xyz):
+#         conformer.SetAtomPosition(i, coord)
+#     rdmol.AddConformer(conformer)
+
+#     rdmol = rdmol.GetMol()
+#     return rdmol
 
 
 
+# def from_rdmol_test(rdmol):
+#     '''
+#     A test version of structure_from_rdmol function, which is to test whether the molecule structure information can be extracted by RDKit functions without for loop.
+#     The result shows the original function with for loop is faster than this test version.
+#     '''
 
+#     type_array = np.zeros(rdmol.GetNumAtoms(), dtype=np.int32)
+#     for i, atoms in enumerate(rdmol.GetAtoms()):
+#         type_array[i] = atoms.GetAtomicNum()
+#     if rdmol.GetNumConformers() < 1:
+#         AllChem.Compute2DCoords(rdmol)
+#     xyz_array = rdmol.GetConformer().GetPositions()
+#     conn_array = rdmol.GetAdjacencyMatrix(useBO=True)
 
-
-
-
-
-
-
-
-
+#     return type_array, xyz_array, conn_array
 
 
 

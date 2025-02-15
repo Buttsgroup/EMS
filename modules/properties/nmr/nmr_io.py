@@ -182,7 +182,27 @@ def nmr_read(stringfile, streamlit=False):
     return shift_array, shift_var, coupling_array, coupling_var
 
     
-def nmr_read_rdmol(shift, coupling):
+def nmr_read_rdmol(rdmol, mol_id):
+    '''
+    This function is used to read NMR data from an RDKit molecule object.
+
+    Args:
+    - rdmol (rdkit.Chem.rdchem.Mol): RDKit molecule object.
+    - mol_id (str): Molecule ID.
+    '''
+
+    # Get all the properties of the RDKit molecule object
+    prop_dict = rdmol.GetPropsAsDict()
+    
+    # Get the NMR data (NMREDATA_ASSIGNMENT for chemical shifts and NMREDATA_J for coupling constants) from the properties
+    try:
+        shift = prop_dict['NMREDATA_ASSIGNMENT']
+        coupling = prop_dict['NMREDATA_J']
+    except Exception as e:
+        logger.error(f'No NMR data found for molecule {mol_id}')
+        raise ValueError(f'No NMR data found for molecule {mol_id}')
+
+    # Split the NMR data block into lines and then into items
     shift_items = []
     for line in shift.split('\n'):
         if line:
@@ -193,16 +213,22 @@ def nmr_read_rdmol(shift, coupling):
         if line:
             coupling_items.append(line.split())
     
+    # Initialize arrays for saving NMR data
     num_atom = len(shift_items)
     shift_array = np.zeros(num_atom, dtype=np.float64)
     shift_var = np.zeros(num_atom, dtype=np.float64)
     coupling_array = np.zeros((num_atom, num_atom), dtype=np.float64)
     coupling_var = np.zeros((num_atom, num_atom), dtype=np.float64)
 
+    # Read the NMR data from the lines
+    # Shift assignment row looks like this
+    #  0    , -33.56610000   , 8    , 0.00000000     \
     for item in shift_items:
         shift_array[int(item[0])] = float(item[2])
         shift_var[int(item[0])] = float(item[6])
     
+    # Coupling row looks like this
+    #  0         , 4         , -0.08615310    , 3JON      , 0.00000000
     for item in coupling_items:
         coupling_array[int(item[0])][int(item[2])] = float(item[4])
         coupling_array[int(item[2])][int(item[0])] = float(item[4])
