@@ -1,6 +1,6 @@
 from typing import Type, List, Optional
 import numpy as np
-from EMS import EMS
+from EMS.EMS import EMS
 
 
 class EMSconf(EMS):
