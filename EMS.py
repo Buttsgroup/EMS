@@ -7,7 +7,7 @@ from datetime import date
 import random
 import string
 
-from EMS.modules.properties.structure_io import structure_from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block
+from EMS.modules.properties.structure_io import structure_from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block, log_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol
 
@@ -185,6 +185,18 @@ class EMS(object):
                 except Exception as e:
                     logger.error(f"Fail to read the xyz file: {self.file}")
                     raise e
+                
+            elif ftype == "log":
+                try:
+                    log_read_result = log_to_rdmol(self.file)
+                    if log_read_result[-1] == 'Gaussian':
+                        self.rdmol, raw_shift, raw_coupling = log_read_result[:-1]
+                        self.atom_properties["raw_shift"] = raw_shift
+                        self.pair_properties["raw_coupling"] = raw_coupling
+
+                except Exception as e:
+                    logger.error(f"Fail to read the log file: {self.file}")
+                    raise e
 
             elif ftype == "mol2":
                 self.rdmol = Chem.MolFromMol2File(
@@ -267,6 +279,9 @@ class EMS(object):
                 except Exception as e:
                     logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
                     raise e
+
+            elif 'raw_shift' in self.atom_properties:
+                pass
 
             else:
                 try:

@@ -10,6 +10,7 @@ from rdkit.Chem.rdDetermineBonds import DetermineBonds
 from rdkit.Chem.rdchem import BondType
 
 from EMS.utils.periodic_table import Get_periodic_table
+from EMS.modules.comp_chem.gaussian.gaussian_read import gauss_nmr_read
 
 
 ########### Set up the logger system ###########
@@ -76,6 +77,56 @@ def structure_from_rdmol(mol, kekulize=True):
                 conn_array[j][i] = int(bond.GetBondTypeAsDouble())
 
     return type_array, xyz_array, conn_array
+
+
+def NonConn_structure_to_rdmol(type_array, xyz_array):
+    '''
+    This function is used to convert the structure information: atom types and atom coordinates, to an RDKit molecule object.
+    The bond orders between atoms are not included in the structure information, so they will be determined by the RDKit function DetermineBonds.
+
+    Args:
+    - type_array (np.ndarray): The array of atom types, which is the atomic number of each atom. The shape is (num_atoms,).
+    - xyz_array (np.ndarray): The array of atom coordinates. The shape is (num_atoms, 3).
+    '''
+
+    # Check the types of type_array and xyz_array, and convert them to lists if they are numpy arrays
+    if type(type_array) != np.ndarray and type(type_array) != list:
+        logger.error(f"Invalid type for type_array: {type(type_array)}. The type_array should be a numpy array or a list.")
+        raise TypeError(f"Invalid type for type_array: {type(type_array)}. The type_array should be a numpy array or a list.")
+    if type(xyz_array) != np.ndarray and type(xyz_array) != list:
+        logger.error(f"Invalid type for xyz_array: {type(xyz_array)}. The xyz_array should be a numpy array or a list.")
+        raise TypeError(f"Invalid type for xyz_array: {type(xyz_array)}. The xyz_array should be a numpy array or a list.")
+
+    if type(type_array) == np.ndarray:
+        type_array = type_array.tolist()
+    if type(xyz_array) == np.ndarray:
+        xyz_array = xyz_array.tolist()
+    
+
+    # Create an RDKit molecule object and add atoms and coordinates to the molecule
+    mol = Chem.RWMol()
+    conf = Chem.Conformer(len(type_array))
+
+    atom_indices = []
+    for i, (atom, coord) in enumerate(zip(type_array, xyz_array)):
+        rd_atom = Chem.Atom(atom)
+        idx = mol.AddAtom(rd_atom)
+        conf.SetAtomPosition(idx, coord)
+        atom_indices.append(idx)
+
+    mol.AddConformer(conf)
+
+    # Determine and add bonds in the molecule
+    try:
+        DetermineBonds(mol)
+    except Exception as e:
+        logger.error(f"Fail to determine the bonds by DetermineBonds function")
+        raise e
+    
+    # Get the RDKit Mol object.
+    mol = mol.GetMol()
+    
+    return mol
 
 
 def sdf_to_rdmol(file_path, mol_id, manual_read=False, streamlit=False):
@@ -378,6 +429,37 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_
     # Return the sdf block
     return ''.join(lines)
     
+
+def log_to_rdmol(log_file):
+    '''
+    This function is used to read a log file and convert it to an RDKit molecule object.
+    The function reads the first line of the log file to determine the type of the log file, and then calls the corresponding function to read the log file.
+    If the log file is a Gaussian log file, this function returns the RDKit molecule object, the chemical shielding tensors, the coupling constants, and a 'Gaussian' string.
+
+    Args:
+    - log_file (str): The path to the log file.
+    '''
+
+    with open(log_file, 'r') as f:
+        first_line = f.readline()
+    
+    if "Gaussian" in first_line:
+        atom_types, atom_coords, shift_array, couplings = gauss_nmr_read(log_file)
+        rdmol = NonConn_structure_to_rdmol(atom_types, atom_coords)
+
+        return rdmol, shift_array, couplings, 'Gaussian'
+
+    else:
+        logger.error(f"Invalid log file: {log_file}. No type keyword found.")
+        raise ValueError(f"Invalid log file: {log_file}. No type keyword found.")
+
+
+
+
+     
+
+
+
 
 
 
