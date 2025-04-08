@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as np, pandas as pd
 import copy
 from io import StringIO
 import logging
@@ -7,7 +7,7 @@ from datetime import date
 import random
 import string
 
-from EMS.modules.properties.structure_io import structure_from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block
+from EMS.modules.properties.structure_io import structure_from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block, dataframe_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol
 
@@ -66,16 +66,20 @@ class EMS(object):
 
     def __init__(
         self,
-        file,                      # File path
-        mol_id=None,               # Customized molecule id
-        line_notation=None,        # 'smiles' or 'smarts'
-        rdkit_mol=False,           # Whether to read the file as an rdkit molecule
-        nmr=False,                 # Whether to read NMR data
-        streamlit=False,           # Streamlit mode is used to read the file from website
-        addHs=False,               # Whether to add hydrogens to the rdkit molecule object
-        sanitize=False,            # Whether to sanitize the rdkit molecule object
-        kekulize=True,             # Whether to kekulize the rdkit molecule object
+        file=None,                  # File path (optional if DataFrames are used)
+        mol_id=None,                # Customized molecule ID
+        line_notation=None,         # 'smiles' or 'smarts'
+        rdkit_mol=False,            # Whether to read the file as an rdkit molecule
+        dataframe=False,            # Whether EMS objects are being read from a DataFrame
+        atom_df=None,               # Atom dataframe
+        pair_df=None,               # Pair dataframe
+        nmr=False,                  # Whether to read NMR data
+        streamlit=False,            # Streamlit mode is used to read the file from website
+        addHs=False,                # Whether to add hydrogens to the rdkit molecule object
+        sanitize=False,             # Whether to sanitize the rdkit molecule object
+        kekulize=True               # Whether to kekulize the rdkit molecule object
     ):
+
         
         # To initialize self.id, self.filename, self.file and self.stringfile
         # (1) If the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
@@ -86,6 +90,8 @@ class EMS(object):
         # (4) If the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customized 'mol_id' name
         if line_notation:
             self.id = file
+        elif dataframe:
+            self.id = list(atom_df['molecule_name'])[0]
         else:
             self.id = mol_id
 
@@ -168,7 +174,12 @@ class EMS(object):
         # If the molecule file is an rdkit molecule, the rdmol object is the molecule itself
         elif rdkit_mol:
             self.rdmol = file
- 
+        
+        # If the molecule is a dataframe, an rdmol object is generated
+        elif dataframe:
+            self.rdmol = dataframe_to_rdmol(atom_df, pair_df)
+            self.rdmol.SetProp("_Name", self.id)
+
         # If the molecule is saved in a file, the rdmol object is generated from the file
         else:
             ftype = self.filename.split(".")[-1]
@@ -259,25 +270,41 @@ class EMS(object):
         
         # Get NMR properties
         if nmr:
-            self.get_coupling_types()       # Generate self.pair_properties["nmr_types"]
+            if dataframe:
+                # Atom-level NMR properties
+                num_atoms = len(atom_df)
+                shift = np.array(atom_df['shift'], dtype=np.float64)
+                shift_var = np.zeros(num_atoms, dtype=np.float64)
+                # Pair-level NMR properties
+                coupling_array = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+                coupling_len = np.zeros((num_atoms, num_atoms), dtype=object)
+                coupling_vars = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+                i, j, coupling, pl = pair_df['atom_index_0'].to_numpy(), pair_df['atom_index_1'].to_numpy(), pair_df['coupling'].to_numpy(), pair_df['nmr_types'].to_numpy()
+                coupling_array[i, j] = coupling
+                coupling_len[i, j] = pl
 
-            if rdkit_mol:
-                try:
-                    shift, shift_var, coupling, coupling_vars = nmr_read_rdmol(self.rdmol, self.id)
-                except Exception as e:
-                    logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
-                    raise e
-
+                self.pair_properties["coupling_types"] = coupling_len
+            
             else:
-                try:
-                    shift, shift_var, coupling, coupling_vars = nmr_read(self.stringfile, self.streamlit)
-                except Exception as e:
-                    logger.error(f'Fail to read NMR data for molecule {self.id} from file {self.stringfile}')
-                    raise e
+                self.get_coupling_types()       # Generate self.pair_properties["nmr_types"]
+
+                if rdkit_mol:
+                    try:
+                        shift, shift_var, coupling_array, coupling_vars = nmr_read_rdmol(self.rdmol, self.id)
+                    except Exception as e:
+                        logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
+                        raise e
+
+                else:
+                    try:
+                        shift, shift_var, coupling_array, coupling_vars = nmr_read(self.stringfile, self.streamlit)
+                    except Exception as e:
+                        logger.error(f'Fail to read NMR data for molecule {self.id} from file {self.stringfile}')
+                        raise e
 
             self.atom_properties["shift"] = shift
             self.atom_properties["shift_var"] = shift_var
-            self.pair_properties["coupling"] = coupling
+            self.pair_properties["coupling"] = coupling_array
             self.pair_properties["coupling_var"] = coupling_vars
             if len(self.atom_properties["shift"]) != len(self.type):
                 logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
@@ -479,9 +506,10 @@ class EMS(object):
         rdmol_MolFileComments = FileComments
 
         # Set the name of the temporary SDF file to save the RDKit molecule
-        characters = string.ascii_letters + string.digits  
-        random_string = ''.join(random.choices(characters, k=30))
-        tmp_sdf_file = f"tmp_{random_string}.sdf"
+        #characters = string.ascii_letters + string.digits  
+        #random_string = ''.join(random.choices(characters, k=30))
+        #tmp_sdf_file = f"tmp_{random_string}.sdf"
+        tmp_sdf_file='tmp_sdf_file.sdf'
 
         # Set the SDF file version according to the atom number of the RDKit molecule
         atom_num = len(self.type)
@@ -510,8 +538,8 @@ class EMS(object):
         # Set the properties to write to the SDF file
         prop_to_write = prop_to_write
         origin_prop = list(rdmol.GetPropsAsDict().keys())
-
-        if prop_to_write is None:
+        
+        '''if prop_to_write is None:
             prop_to_write = []
         
         elif prop_to_write == "all":
@@ -523,7 +551,7 @@ class EMS(object):
         elif type(prop_to_write) != list:
             logger.error(f"The roperty to write: {prop_to_write}, is not supported. All original properties will be written to the SDF file.")
             prop_to_write = origin_prop
-        
+        '''
         prop_to_delete = list(set([prop for prop in origin_prop if prop not in prop_to_write]))
     
         # Get the SDF block of the RDKit molecule
@@ -535,6 +563,36 @@ class EMS(object):
         else:
             with open(outfile, "w") as f:
                 f.write(block)
+
+        if prop_to_write == "nmr":
+            with open(outfile, 'r') as file:
+                content = file.read()
+            content = content.replace('$$$$', '')
+            with open(outfile, 'w') as file:
+                file.write(content)
+
+
+            with open(outfile, 'a') as f:
+                f.write('\n> <NMREDATA_ASSIGNMENT>\n')
+                for i, (typ, shift, var) in enumerate(zip(self.type, self.atom_properties['shift'], self.atom_properties['shift_var'])):
+                    line = f"{i+1:<5d}, {shift:<15.8f}, {typ:<5d}, {var:<15.8f}\\\n"
+                    f.write(line)
+
+                f.write('\n> <NMREDATA_J>\n')
+                num_atoms = len(self.type)
+                for i in range(num_atoms):
+                    for j in range(i + 1, num_atoms):  # avoid duplicate and self-pairs
+                        coupling = self.pair_properties['coupling'][i][j]
+                        if coupling == 0:
+                            continue
+                        label = self.pair_properties['coupling_types'][i][j]
+                        var = self.pair_properties['coupling_var'][i][j]
+                        line = f"{i+1:<10d}, {j+1:<10d}, {coupling:<15.8f}, {label:<10s}, {var:<15.8f}\n"
+                        f.write(line)
+
+                f.write("\n$$$$\n")
+
+            f.close()
 
 
 
