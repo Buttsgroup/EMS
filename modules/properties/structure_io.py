@@ -323,6 +323,54 @@ def xyz_to_rdmol(file_path):
         
         return mol
     
+# Dataframe read functionality
+def dataframe_to_rdmol(filtered_atom_df, filtered_pair_df):
+    '''
+    This function is used to read a molecular dataframe and convert it to an RDKit molecule object.
+
+    Args:
+    - filtered_atom_df: The atom dataframe
+    - filtered_pair_df: The pair dataframe
+    '''
+    mol_name=list(filtered_atom_df['molecule_name'])[0]
+    atom_types = filtered_atom_df['typestr'].tolist()
+    xyz_with_atom = [((x, y, z), atom) for (x, y, z), atom in zip(filtered_atom_df[['x', 'y', 'z']].to_numpy(), filtered_atom_df['typestr'])]
+    conn_matrix = np.array(filtered_atom_df['conn'].to_list(), dtype=int)
+    # Map integers to RDKit BondTypes
+    BondType_dict = {
+        1: BondType.SINGLE,
+        2: BondType.DOUBLE,
+        3: BondType.TRIPLE,
+        4: BondType.AROMATIC
+    }
+    
+    bond_indices = [
+        (i, j, BondType_dict.get(conn_matrix[i, j], BondType.SINGLE))
+        for i in range(conn_matrix.shape[0])
+        for j in range(i + 1, conn_matrix.shape[1])
+        if conn_matrix[i, j] > 0
+    ]
+
+    mol = Chem.RWMol()
+    conf = Chem.Conformer(len(xyz_with_atom))
+    
+    atom_indices = []
+    for coord, atom in xyz_with_atom:
+        rd_atom = Chem.Atom(atom)
+        idx = mol.AddAtom(rd_atom)
+        conf.SetAtomPosition(idx, coord)
+        atom_indices.append(idx)
+        
+    for idx1, idx2, bond in bond_indices:
+        mol.AddBond(idx1, idx2, bond)
+
+        # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
+        mol.AddConformer(conf)
+        rdmol = mol.GetMol()
+        rdmol.SetProp("_NAME", mol_name)
+    
+    return rdmol
+
 
 def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_delete=[], SDFversion="V3000"):
     '''
