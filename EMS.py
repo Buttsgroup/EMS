@@ -88,6 +88,7 @@ class EMS(object):
         # (3) If the molecule file is neither SMILES/SMARTS string or streamlit but saved in a file like .sdf, self.id is the customized 'mol_id' name, 
         #     self.file and self.stringfile are the file path, and self.filename is the file name seperated by '/' in the file path
         # (4) If the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customized 'mol_id' name
+        # (5) If the molecule is a dataframe, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the first 'molecule_name' item in the atom_df dataframe
         if line_notation:
             self.id = file
         elif dataframe:
@@ -101,11 +102,15 @@ class EMS(object):
             self.filename = file.name
         elif rdkit_mol:
             self.filename = mol_id
+        elif dataframe:
+            self.filename = self.id
         else:
             self.filename = file.split('/')[-1]
         
         if rdkit_mol:
             self.file = mol_id
+        elif dataframe:
+            self.file = self.id
         else:
             self.file = file
 
@@ -113,6 +118,8 @@ class EMS(object):
             self.stringfile = StringIO(file.getvalue().decode("utf-8"))
         elif rdkit_mol:
             self.stringfile = mol_id
+        elif dataframe:
+            self.stringfile = self.id
         else:
             self.stringfile = file
 
@@ -177,7 +184,7 @@ class EMS(object):
         
         # If the molecule is a dataframe, an rdmol object is generated
         elif dataframe:
-            self.rdmol = dataframe_to_rdmol(atom_df, pair_df)
+            self.rdmol = dataframe_to_rdmol(atom_df, self.id)
             self.rdmol.SetProp("_Name", self.id)
 
         # If the molecule is saved in a file, the rdmol object is generated from the file
