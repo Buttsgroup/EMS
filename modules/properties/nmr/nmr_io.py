@@ -236,3 +236,72 @@ def nmr_read_rdmol(rdmol, mol_id):
         coupling_var[int(item[2])][int(item[0])] = float(item[8])
     
     return shift_array, shift_var, coupling_array, coupling_var
+
+
+def nmr_read_df(atom_df, pair_df, mol_name):
+    '''
+    This function is used to read NMR data from atom and pair dataframes with the assigned molecule name.
+
+    Args:
+    - atom_df (pd.DataFrame): DataFrame containing atom-level NMR data.
+    - pair_df (pd.DataFrame): DataFrame containing pair-level NMR data.
+    - mol_name (str): The molecule to read NMR data for.
+    '''
+
+    # Get the atom and pair dataframes for the given molecule name
+    mol_atom_df = atom_df[atom_df['molecule_name'] == mol_name]
+    mol_pair_df = pair_df[pair_df['molecule_name'] == mol_name]
+
+    # Check whether the indexes in the molecule are continuous
+    # If not, that means two molecules in the dataframe share the same molecule name
+    atom_index = list(mol_atom_df.index)
+    pair_index = list(mol_pair_df.index)
+
+    atom_check = True
+    pair_check = True
+
+    for i in range(len(atom_index)-1):
+        if atom_index[i+1] - atom_index[i] != 1:
+            atom_check = False
+            break
+    
+    for i in range(len(pair_index)-1):
+        if pair_index[i+1] - pair_index[i] != 1:
+            pair_check = False
+            break
+    
+    if not (atom_check and pair_check):
+        logger.error(f"The indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.")
+        raise ValueError(f"The indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.")
+    
+
+    # Get the atom-level NMR parameters
+    num_atoms = len(atom_df)
+    shift = np.array(atom_df['shift'], dtype=np.float64)
+    shift_var = np.array(atom_df['shift_var'], dtype=np.float64)
+
+    if not (shift.ndim == 1 and shift_var.ndim == 1):
+        logger.error(f"Shift and shift variance arrays should be one-dimensional for molecule {mol_name}!")
+        raise ValueError(f"Shift and shift variance arrays should be one-dimensional for molecule {mol_name}!")
+    
+    if not (len(shift) == num_atoms and len(shift_var) == num_atoms):
+        logger.error(f"Shift and shift variance arrays should be the same length as the number of atoms for molecule {mol_name}!")
+        raise ValueError(f"Shift and shift variance arrays should be the same length as the number of atoms for molecule {mol_name}!")
+    
+    # Get the pair-level NMR parameters
+    coupling_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+    coupling_var_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+    coupling_types_mat = np.zeros((num_atoms, num_atoms), dtype=np.int32).astype(str)
+
+    i = np.array(pair_df['atom_index_0'], dtype=np.int32)
+    j = np.array(pair_df['atom_index_1'], dtype=np.int32)
+    coupling = np.array(pair_df['coupling'], dtype=np.float64)
+    coupling_var = np.array(pair_df['coupling_var'], dtype=np.float64)
+    coupling_types = np.array(pair_df['nmr_types'], dtype=str)
+    
+    coupling_mat[i, j] = coupling
+    coupling_var_mat[i, j] = coupling_var
+    coupling_types_mat[i, j] = coupling_types
+
+    # Return the NMR data
+    return shift, shift_var, coupling_mat, coupling_var_mat, coupling_types_mat

@@ -78,17 +78,16 @@ def structure_from_rdmol(mol, kekulize=True):
     return type_array, xyz_array, conn_array
 
 
-def sdf_to_rdmol(file_path, mol_id, manual_read=False, streamlit=False):
+def sdf_to_rdmol(file_path, manual_read=False, streamlit=False):
     '''
     This function is used to read an sdf file and convert it to an RDKit molecule object.
     There are two modes to read the sdf file: by manual read and by Chem.ForwardSDMolSupplier.
     The manual read mode is only used for V2000 version SDF files. 
     It reads the SDF file line by line and manually adds atoms and bonds to the RDKit molecule, which is an alternative way when the Chem.ForwardSDMolSupplier mode fails.
-    The Chem.ForwardSDMolSupplier mode is the recommended way to read the sdf file, which is usually more stable and efficient.
+    The Chem.ForwardSDMolSupplier mode is the recommended and default way to read the sdf file, which is usually more stable and efficient.
 
     Args:
     - file_path (str): The path to the sdf file.
-    - mol_id (str): The id of the molecule, which is customized by the user.
     - manual_read (bool): Whether to read the sdf molecule manually or by Chem.ForwardSDMolSupplier. 
         If True, the function will read the sdf file line by line and manually add atoms and bonds to the RDKit molecule.
         If False, the function will read the sdf file by Chem.ForwardSDMolSupplier, which is the recommended way.
@@ -216,44 +215,6 @@ def sdf_to_rdmol(file_path, mol_id, manual_read=False, streamlit=False):
                 rdmol = mol
                 break
 
-
-    # The following section aims to set the _Name property for the molecule.
-    # The _Name property is chosen in the following order if not blank: mol.GetProp("_Name"), mol_id, mol.GetProp("FILENAME").
-    # The _Name property first searches the _Name property in the RDKit molecule object, which is the first line in the sdf block, 
-    # then the customized 'self.id' attribute (mol_id) in the EMS object, and finally the FILENAME property.
-    # The FILENAME property is not a standard property in the RDKit molecule object or the sdf file, but it is used in some sdf files in our lab.
-    # Since the FILENAME property is not a standard property, it is in the lowest priority.
-
-    # Get the molecule name from the _Name property
-    try:
-        NameProp = rdmol.GetProp("_Name")
-    except:
-        NameProp = None
-        logger.info(f"Fail to read _Name property in {file_path}")
-    
-    if type(NameProp) == str:
-        NameProp = NameProp.strip()
-
-    # Get the molecule name from the FILENAME property
-    try:
-        filename = rdmol.GetProp("FILENAME")
-    except:
-        filename = None
-        logger.info(f"FILENAME property not found in {file_path}")
-
-    if type(filename) == str:
-        filename = filename.strip()
-    
-    # Set the _Name property for the molecule according to the following order: NameProp, filename, mol_id
-    name_order = [NameProp, mol_id, filename]
-    name_order = [i for i in name_order if i is not None and i != ""]
-    
-    if len(name_order) == 0:
-        rdmol.SetProp("_Name", '')
-    else:
-        rdmol.SetProp("_Name", name_order[0])
-    
-
     # Check whether the RDKit molecule object is successfully read
     if rdmol is None:
         logger.error(f"Fail to read the molecule in the sdf file: {file_path}")
@@ -348,8 +309,8 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
             break
 
     if not continuous_check:
-        logger.error('The atom indexes in the molecule are not continuous. Two molecules may share the same molecule name.')
-        raise ValueError('The atom indexes in the molecule are not continuous. Two molecules may share the same molecule name.')
+        logger.error(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
+        raise ValueError(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
 
 
     # Get the atom coordinates, atom types and connectivity matrix from the atom dataframe
@@ -392,7 +353,6 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
     # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
     mol.AddConformer(conf)
     rdmol = mol.GetMol()
-    rdmol.SetProp("_NAME", mol_name)
     
     return rdmol
 
