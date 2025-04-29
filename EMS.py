@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import logging
+import os
 
 import glob
 import re
@@ -17,6 +19,9 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
 
+# Setup logger for this module
+logger = logging.getLogger('EMS')
+
 class EMS(object):
 
     def __init__(
@@ -27,7 +32,7 @@ class EMS(object):
         nmr=False,
         streamlit=False,
         fragment=False,
-        max_atoms=50,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
+        max_atoms=5000,          # maximum number of atoms in a molecule, if the molecule has less atoms than this number, the extra atoms are dumb atoms
     ):
 
         # if the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
@@ -274,3 +279,131 @@ class EMS(object):
 
     def convert_to_rdmol(self):
         self.rdmol = to_rdmol(self)
+
+    def add_predicted_nmr_properties(self, pred_atom, pred_pair, var=False):
+        logger.debug("Starting add_predicted_nmr_properties...")
+        #logger.debug(f"pred_atom columns: {pred_atom.columns}")
+        #logger.debug(f"pred_atom shape: {pred_atom.shape}")
+        #logger.debug(f"pred_pair columns: {pred_pair.columns}")
+        #logger.debug(f"pred_pair shape: {pred_pair.shape}")
+        
+        self.get_coupling_types()
+
+        # Initialize properties
+        atoms = len(self.type)
+        self.atom_properties['predicted_shift'] = np.zeros(atoms, dtype=np.float64)
+        self.pair_properties['predicted_coupling'] = np.zeros((atoms, atoms), dtype=np.float64)
+
+        # Add shift predictions
+        try:
+            shifts = pred_atom['predicted_shift'].to_numpy()
+            indices = pred_atom['atom_index'].to_numpy()
+            for idx, shift in zip(indices, shifts):
+                self.atom_properties['predicted_shift'][idx] = shift
+        except Exception as e:
+            logger.error(f"Error processing shifts: {str(e)}")
+            raise
+
+        # Add coupling predictions
+        try:
+            for _, row in pred_pair.iterrows():
+                i = int(row['atom_index_0'])
+                j = int(row['atom_index_1'])
+                coupling = row['predicted_coupling']
+                self.pair_properties['predicted_coupling'][i][j] = coupling
+                self.pair_properties['predicted_coupling'][j][i] = coupling  # symmetric matrix
+        except Exception as e:
+            logger.error(f"Error processing couplings: {str(e)}")
+            logger.error(f"Problem row: {row}")
+            raise
+
+        if var:
+            # Handle variance if needed
+            self.atom_properties['shift_var'] = np.zeros(atoms, dtype=np.float64)
+            self.pair_properties['coupling_var'] = np.zeros((atoms, atoms), dtype=np.float64)
+
+        logger.debug("Completed add_predicted_nmr_properties")
+        #logger.debug(f"predicted_shift: {self.atom_properties['predicted_shift']}")
+        #logger.debug(f"predicted_coupling: {self.pair_properties['predicted_coupling']}")
+
+    def write_to_file(self, file_path, count_from=0, write_zeros=False, print_predicted=True):
+        # Get directory and filename
+        output_dir = os.path.dirname(file_path)
+        base_name = os.path.basename(file_path)
+        
+        # Write the initial SDF file
+        writer = Chem.SDWriter(file_path)
+        self.rdmol.SetProp('_Name', f'{self.id}_IMPRESSION')
+        self.rdmol.SetProp('_SMILES', self.mol_properties['SMILES'])
+        writer.write(self.rdmol)
+        writer.close()
+
+        lines = []
+        lines.append('')
+
+        atoms = len(self.type)
+        props = {}
+        for label in ["predicted_shift", "shift", "shift_var"]:
+            if label in self.atom_properties.keys():
+                props[label] = self.atom_properties[label]
+            else:
+                props[label] = np.zeros(atoms, dtype=np.float64)
+        for label in ["predicted_coupling", "coupling", "coupling_var"]:
+            if label in self.pair_properties.keys():
+                props[label] = self.pair_properties[label]
+            else:
+                props[label] = np.zeros((atoms,atoms), dtype=np.float64)
+
+        if print_predicted:
+            props['shift'] = props['predicted_shift']
+            props['coupling'] = props['predicted_coupling']
+
+        # Update file handling to use full path
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+
+        # Find the index of the line containing $$$$
+        end_index = -1
+        for i, line in enumerate(lines):
+            if line.strip() == '$$$$':
+                end_index = i
+                break
+        
+        # Keep everything up to the $$$$ line
+        new_lines = lines[:end_index]
+        
+        # Add NMREDATA_ASSIGNMENT section
+        new_lines.append('> <NMREDATA_ASSIGNMENT>\n')
+        
+        # Print chemical shifts with variance
+        for i, (type, shift, var) in enumerate(zip(self.type, 
+                                                props['shift'], 
+                                                props['shift_var'])):
+            string = f" {i+count_from:<5d}, {shift:<15.8f}, {type:<5d}, {var:<15.8f}\\\n"
+            new_lines.append(string)
+        
+        # Add NMREDATA_J section
+        new_lines.append('\n')
+        new_lines.append('> <NMREDATA_J>\n')
+        
+        # Print couplings with variance and label
+        for i in range(len(self.type)):
+            for j in range(len(self.type)):
+                if i >= j:
+                    continue
+                if self.path_topology[i][j] == 0:
+                    continue
+                if props['coupling'][i][j] == 0 and not write_zeros:
+                    continue
+                    
+                string = f" {i+count_from:<10d}, {j+count_from:<10d}, {props['coupling'][i][j]:<15.8f}, "
+                string += f"{self.pair_properties['nmr_types'][i][j]:<10s}, {props['coupling_var'][i][j]:<15.8f}\n"
+                new_lines.append(string)
+        
+        # Add final line
+        new_lines.append('\n')
+        new_lines.append('$$$$\n')
+        
+        # Write to output file using full path
+        with open(file_path, 'w') as f:
+            f.writelines(new_lines)
