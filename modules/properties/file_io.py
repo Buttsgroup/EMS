@@ -8,6 +8,8 @@ from rdkit.Chem import AllChem
 from EMS.modules.properties.structure.structure_io import sdf_to_rdmol
 from EMS.modules.properties.structure.structure_io import xyz_to_rdmol
 from EMS.modules.properties.structure.structure_io import dataframe_to_rdmol
+from EMS.modules.properties.structure.structure_io import structure_to_rdmol_NoConn
+from EMS.modules.comp_chem.gaussian.gaussian_io import gaussian_read
 
 
 ########### Set up the logger system ###########
@@ -94,14 +96,17 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
     (2) .xyz file (str)
         - The .xyz files usually don't include a name for the molecule, so it is recommended to set a name for the molecule using the 'mol_id' argument.
         - All of the id and official name for the EMS molecule and the name in the RDKit molecule object will be usually the same.
-    (3) line notation string (str), such as SMILES or SMARTS
+    (3) .log file by Gaussian (str)
+        - The Gaussian .log files usually don't include a name for the molecule, so it is recommended to set a name for the molecule using the 'mol_id' argument.
+        - The name for the RDKit molecule is assigned in the order of _Name, FILENAME, mol_id.
+    (4) line notation string (str), such as SMILES or SMARTS
         - Both the name for the RDKit molecule and the official name for the EMS molecule will be assigned using the line notation string.
         - The RDKit molecule object generated from the line notation string will be sanitized, hydrogen-added and kekulized.
-    (4) RDKit molecule object (rdkit.Chem.rdchem.Mol)
+    (5) RDKit molecule object (rdkit.Chem.rdchem.Mol)
         - The name for the RDKit molecule is assigned in the order of _Name, FILENAME, mol_id.
         - If none of these properties are available, the _Name property will be set to an empty string ''.
         - The official name for the EMS molecule will be obtained from the '_Name' property of the name-assigned RDKit molecule object.
-    (5) atom and pair dataframes (tuple)
+    (6) atom and pair dataframes (tuple)
         - The tuple should contain two pandas dataframes: the atom dataframe and the pair dataframe.
         - Both the name for the RDKit molecule and the official name for the EMS molecule will be assigned using the molecule name in the atom dataframe.
     '''
@@ -146,8 +151,36 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
             # Because the .xyz files usually don't include a name for the molecule, the id and official name for the EMS molecule and the name in the RDKit molecule object will be the same.
             rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
             official_name = rdmol.GetProp("_Name")
+
+        
+        # Check if the file is a .log file
+        elif file.endswith('.log'):
+            with open(file, 'r') as f:
+                first_line = f.readline()
             
-            
+            # Check if the .log file is a Gaussian log file
+            if 'Gaussian' in first_line:
+                file_type = 'gaussian-log'
+                
+                # Get the atom types and coordinates from the Gaussian log file
+                try:
+                    atom_types, atom_coords = gaussian_read(file)
+                    rdmol = structure_to_rdmol_NoConn(atom_types, atom_coords)
+                except:
+                    logger.error(f"Fail to read RDKit molecule from the Gaussian log file: {file}")
+                    raise ValueError(f"Fail to read RDKit molecule from the Gaussian log file: {file}")
+                
+                # Assign a name to the RDKit molecule object in the order of _Name, FILENAME, mol_id
+                rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
+                official_name = rdmol.GetProp("_Name")
+
+
+            # Raise an error if the .log file is not a supported type 
+            else:
+                logger.error(f"Unable to determine the file type from the .log file: {file}")
+                raise ValueError(f"Unable to determine the file type from the .log file: {file}")
+
+
         # If the file is not a path string, check if it is a line notation string
         else:
             as_smiles = None

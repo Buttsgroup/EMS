@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 
 def nmr_read(stringfile, streamlit=False):
     '''
-    This function is used to read NMR data from an SDF file. When reading NMR data for an EMS object, the SDF file is the self.stringfile attribute.
+    This function is used to read NMR data from an SDF file. When reading NMR data for an EMS object, the SDF file is the self.file attribute.
     It reads the SDF file line by line and extracts the NMR data from the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> properties in the SDF file.
     Details of this function:
     (1) This function is designed to read NMR data from both V2000 and V3000 SDF files.
@@ -24,16 +24,16 @@ def nmr_read(stringfile, streamlit=False):
         and then reads the structure block to get the number of atom lines (before 'M  END' line). If the two numbers are not equal, an error will be raised.
 
     Args:
-    - stringfile (str): The SDF string if streamlit is on, or the path to the SDF file if streamlit is off.
-    - streamlit (bool): If True, the SDF file is as read as streamlit. If False (default), the SDF file is read as a file path.
+    - stringfile (str): The path to the SDF file, which is the self.file attribute of the EMS object.
+    - streamlit (bool): If True, the SDF file is as read as streamlit.
     '''
 
-    # Get the file as a list of lines
-    if not streamlit:
+    # Get the file as a list of lines. The streamlit part will be developed later.
+    if streamlit:
+        pass
+    else:
         with open(stringfile, "r") as f:
             lines = f.readlines()
-    else:
-        lines = [line for line in stringfile]
 
     # Initialize variables when reading the SDF file
     structure_end_check = False          # Check if the 'M  END' line or the end of structure information block is reached
@@ -309,7 +309,7 @@ def nmr_read_df(atom_df, pair_df, mol_name):
 
 def nmr_to_sdf_block(atom_types, atom_properties, pair_properties):
     '''
-    This function reads the NMR data saved in EMS molecule's atom and pair properties and converts them to SDF block format.
+    This function reads the NMR data saved in EMS molecule's atom and pair properties and converts them to the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> sections in SDF block.
 
     Args:
     - atom_types (list): List of atom types of one EMS molecule

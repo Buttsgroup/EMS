@@ -1,4 +1,4 @@
-import numpy as np, pandas as pd
+import numpy as np
 import copy
 from io import StringIO
 import logging
@@ -15,9 +15,10 @@ from EMS.modules.properties.nmr.nmr_io import nmr_read
 from EMS.modules.properties.nmr.nmr_io import nmr_read_rdmol
 from EMS.modules.properties.nmr.nmr_io import nmr_read_df
 from EMS.modules.properties.nmr.nmr_io import nmr_to_sdf_block
+from EMS.modules.comp_chem.gaussian.gaussian_io import gaussian_read_nmr
+from EMS.modules.comp_chem.gaussian.gaussian_ops import scale_chemical_shifts
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
 
@@ -114,7 +115,7 @@ class EMS(object):
         # Achieve the filetype, RDKit molecule object and its filename
         # The filename is the official name of the file to read.
         # Details of the definition of filename for different file types are in EMS.modules.properties.file_io
-        self.filetype, self.filename, self.rdmol = file_to_rdmol(file, mol_id=self.id, streamlit=self.streamlit)
+        self.filetype, self.filename, self.rdmol = file_to_rdmol(self.file, mol_id=self.id, streamlit=self.streamlit)
 
         # Assign the official name (filename) of the file to read to self.id if self.id is None
         if self.id is None or self.id == "":
@@ -173,7 +174,6 @@ class EMS(object):
             # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
             self.get_coupling_types()       
 
-
             # Read NMR data if self.file is atom and pair dataframes
             # The difference between pair_properties["nmr_types"] and pair_properties["nmr_types_df"] is:
             # (1) pair_properties["nmr_types"] is the matrix of coupling types between every two atoms, so distant atoms are also included, like '11JCH'
@@ -186,6 +186,13 @@ class EMS(object):
                     shift, shift_var, coupling_array, coupling_vars, coupling_types = nmr_read_df(atom_df, pair_df, self.filename)
 
                     self.pair_properties["nmr_types_df"] = coupling_types
+
+                    # Check if the non-zero elements of pair_properties["nmr_types_df"] also exists in pair_properties["nmr_types"]
+                    nmr_type_mask = self.pair_properties["nmr_types_df"] != '0'
+                    nmr_types_match = self.pair_properties["nmr_types_df"] == self.pair_properties["nmr_types"]
+
+                    if not (nmr_types_match == nmr_type_mask).all():
+                        logger.warning(f"Some coupling types in pair_properties['nmr_types_df'] do not match with pair_properties['nmr_types'] for molecule {self.id}")
                 
                 except Exception as e:
                     logger.error(f'Fail to read NMR data for molecule {self.id} from dataframe')
@@ -201,7 +208,7 @@ class EMS(object):
                     raise e
             
 
-            # Read NMR data for other file types
+            # Read NMR data if self.file is an SDF file
             elif self.filetype == 'sdf':
                 try:
                     shift, shift_var, coupling_array, coupling_vars = nmr_read(self.file, self.streamlit)
@@ -210,18 +217,42 @@ class EMS(object):
                     raise e
             
 
+            # Read NMR data if self.file is a Gaussian .log file
+            elif self.filetype == 'gaussian-log':
+                try:
+                    shift, coupling_array = gaussian_read_nmr(self.file)
+                    shift_var = np.zeros_like(shift)
+                    coupling_vars = np.zeros_like(coupling_array)
+                except Exception as e:
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from Gaussian .log file {self.file}')
+                    raise e
+
+
             # Raise error if the file type is not among the above
             else:
                 logger.error(f'File {self.id} with file type {self.filetype} is not supported for reading NMR data')
                 raise ValueError(f'File {self.id} with file type {self.filetype} is not supported for reading NMR data')
 
 
-            # Assign the NMR data to the atom and pair properties
-            self.atom_properties["shift"] = shift
-            self.atom_properties["shift_var"] = shift_var
-            self.pair_properties["coupling"] = coupling_array
-            self.pair_properties["coupling_var"] = coupling_vars
+            # If file type is 'gaussian-log', save the unscaled shift values in the "raw_shift" attribute of atom properties
+            # Then save the scaled shift values in the "shift" attribute
+            # The coupling values generally don't need to be scaled, so save them in the "coupling" attribute
+            if self.filetype == 'gaussian-log':
+                self.atom_properties["raw_shift"] = shift
+                self.atom_properties["shift_var"] = shift_var
+                self.pair_properties["coupling"] = coupling_array
+                self.pair_properties["coupling_var"] = coupling_vars
 
+                self.atom_properties["shift"] = scale_chemical_shifts(shift, self.type)
+
+            # Assign the NMR data to the atom and pair properties for other file types
+            else:
+                self.atom_properties["shift"] = shift
+                self.atom_properties["shift_var"] = shift_var
+                self.pair_properties["coupling"] = coupling_array
+                self.pair_properties["coupling_var"] = coupling_vars
+
+            # Check if the length of the shift array is equal to the number of atoms in the molecule
             if len(self.atom_properties["shift"]) != len(self.type):
                 logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
                 raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
@@ -381,7 +412,7 @@ class EMS(object):
                 tmp_types.append(targetflag)
             cpl_types.append(tmp_types)
 
-        self.pair_properties["nmr_types"] = cpl_types
+        self.pair_properties["nmr_types"] = np.array(cpl_types, dtype=str)
 
 
     def to_sdf(self, outfile='', FileComments='', prop_to_write=None, prop_cover=False, SDFversion="V3000"):
