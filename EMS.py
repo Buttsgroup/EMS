@@ -11,7 +11,10 @@ from EMS.modules.properties.structure.structure_io import structure_from_rdmol
 from EMS.modules.properties.structure.structure_io import rdmol_to_sdf_block
 from EMS.modules.properties.file_io import file_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
-from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol, nmr_read_df
+from EMS.modules.properties.nmr.nmr_io import nmr_read
+from EMS.modules.properties.nmr.nmr_io import nmr_read_rdmol
+from EMS.modules.properties.nmr.nmr_io import nmr_read_df
+from EMS.modules.properties.nmr.nmr_io import nmr_to_sdf_block
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -381,99 +384,88 @@ class EMS(object):
         self.pair_properties["nmr_types"] = cpl_types
 
 
-    def to_sdf(self, outfile, FileComments='', prop_to_write='all', SDFversion="V3000"):
+    def to_sdf(self, outfile='', FileComments='', prop_to_write=None, prop_cover=False, SDFversion="V3000"):
         """
         Write the emol object to an SDF file with assigned properties.
         The first line is the SDF file name, which is defaulted to the _Name property of the RDKit molecule. If the _Name property is empty, self.id will be used.
         The second line is the SDF file information, which is defaulted to 'EMS (Efficient Molecular Storage) - <year> - ButtsGroup'.
         The third line is the SDF file comments, which is defaulted to blank.
         The properties to write to the SDF file and the SDF version can be customized.
-        V3000 is default and V2000 is not recommended for molecules with more than 99 atoms. If the atom number is greater than 999, V3000 will be used.
 
         Args:
         - outfile (str): The file path to save the SDF file. If outfile is None or blank string "", the SDF block will be returned.
         - FileComments (str): The comments to write to the third line of the SDF file.
-        - prop_to_write (str or list): The properties to write to the SDF file. If prop_to_write is None, no property will be written.
-            If prop_to_write is "all", all the properties of the RDKit molecule will be written.
-            If prop_to_write is "nmr", only the NMR properties (NMREDATA_ASSIGNMENT and NMREDATA_J) will be written.
+        - prop_to_write (str or list): The properties to write to the SDF file. 
+            If prop_to_write is None, no property will be written.
+            If prop_to_write is "nmr", the NMR properties saved in self.atom_properties and self.pair_properties will be written in NMREDATA_ASSIGNMENT and NMREDATA_J sections.
+        - prop_cover (bool): Whether to cover the existing properties in the SDF file. 
         - SDFversion (str): The version of the SDF file. The version can be "V2000" or "V3000".
         """
         
         # Deep copy the rdmol object
         rdmol = copy.deepcopy(self.rdmol)
 
-        # Get the _Name property of the RDKit molecule to write to the first line of the SDF file. If the _Name property is empty, set it to the emol id.
+        # Set the first line of the SDF file to the molecule name in the order of _Name property of self.rdmol, self.filename and self.id
         try:
-            rdmol_Name = rdmol.GetProp("_Name")
-            if rdmol_Name.strip() == "":
-                if self.id is None:
-                    rdmol_Name = ""
-                else:
-                    rdmol_Name = self.id
+            rdmol_Name = rdmol.GetProp("_Name").strip()
         except:
-            logger.warning(f"Fail to get the _Name property of the RDKit molecule. The molecule id will be used instead.")
-            if self.id is None:
-                rdmol_Name = ""
-            else:
-                rdmol_Name = self.id
+            rdmol_Name = ""
 
+        name_list = [rdmol_Name, self.filename, self.id]
+        name_list = [name for name in name_list if name != None and name != ""]
+
+        if len(name_list) == 0:
+            sdf_Name = ""
+        else:
+            sdf_Name = name_list[0]
+        
         # Get the _MolFileInfo property of the RDKit molecule to write to the second line of the SDF file.
-        rdmol_MolFileInfo = f'EMS (Efficient Molecular Storage) - {date.today().year} - ButtsGroup'
+        sdf_MolFileInfo = f'EMS (Efficient Molecular Storage) - {date.today().year} - ButtsGroup'
 
         # Get the _MolFileComments property of the RDKit molecule to write to the third line of the SDF file.
-        rdmol_MolFileComments = FileComments
+        sdf_MolFileComments = FileComments
 
         # Set the name of the temporary SDF file to save the RDKit molecule
-        #characters = string.ascii_letters + string.digits  
-        #random_string = ''.join(random.choices(characters, k=30))
-        #tmp_sdf_file = f"tmp_{random_string}.sdf"
-        tmp_sdf_file='tmp_sdf_file.sdf'
+        characters = string.ascii_letters + string.digits  
+        random_string = ''.join(random.choices(characters, k=30))
+        tmp_sdf_file = f"tmp_{random_string}.sdf"
 
         # Set the SDF file version according to the atom number of the RDKit molecule
         atom_num = len(self.type)
         SDFversion = SDFversion
 
-        if SDFversion == "V2000":
-            logger.info(f"V2000 is not recommended for writing molecules. Try using V3000 instead.")
-
-            if atom_num > 999:
-                logger.error(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
-                SDFversion = "V3000"
-
-            elif atom_num > 99:
-                logger.warning(f"V2000 may cause reading failure for molecules with more than 99 atoms. Try using V3000 instead.")
-            
-            else:
-                logger.info(f"V2000 is being used for molecules with less than 100 atoms.")
+        if SDFversion == "V2000" and atom_num > 999:
+            logger.warning(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
+            SDFversion = "V3000"
         
-        elif SDFversion == "V3000":
-            logger.info(f"V3000 is being used.")
-        
-        else:
-            logger.error(f"SDF version {SDFversion} is not supported. SDF version is set to V3000.")
+        if SDFversion not in ["V2000", "V3000"]:
+            logger.warning(f"SDF version {SDFversion} is not supported. SDF version is set to V3000.")
             SDFversion = "V3000"
         
         # Set the properties to write to the SDF file
-        prop_to_write = prop_to_write
-        origin_prop = list(rdmol.GetPropsAsDict().keys())
-        
-        '''if prop_to_write is None:
+        if prop_to_write is None:
             prop_to_write = []
-        
-        elif prop_to_write == "all":
-            prop_to_write = origin_prop
-        
-        elif prop_to_write == "nmr":
-            prop_to_write = ["NMREDATA_ASSIGNMENT", "NMREDATA_J"]
-        
-        elif type(prop_to_write) != list:
-            logger.error(f"The roperty to write: {prop_to_write}, is not supported. All original properties will be written to the SDF file.")
-            prop_to_write = origin_prop
-        '''
-        prop_to_delete = list(set([prop for prop in origin_prop if prop not in prop_to_write]))
-    
+        elif type(prop_to_write) == str:
+            prop_to_write = [prop_to_write]
+
+        origin_prop = list(rdmol.GetPropsAsDict().keys())
+
+        for prop in prop_to_write:
+            # Write NMR properties to the SDF file
+            if prop == "nmr":
+                atom_lines, pair_lines = nmr_to_sdf_block(self.type, self.atom_properties, self.pair_properties)
+
+                if prop_cover:
+                    rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
+                    rdmol.SetProp("NMREDATA_J", pair_lines)
+                else:
+                    if not "NMREDATA_ASSIGNMENT" in origin_prop:
+                        rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
+                    if not "NMREDATA_J" in origin_prop:
+                        rdmol.SetProp("NMREDATA_J", pair_lines)
+
         # Get the SDF block of the RDKit molecule
-        block = rdmol_to_sdf_block(rdmol, rdmol_Name, rdmol_MolFileInfo, rdmol_MolFileComments, tmp_sdf_file, prop_to_delete=prop_to_delete, SDFversion=SDFversion)
+        block = rdmol_to_sdf_block(rdmol, sdf_Name, sdf_MolFileInfo, sdf_MolFileComments, tmp_sdf_file, SDFversion=SDFversion)
 
         # Write the SDF block to the SDF file
         if outfile is None or outfile.strip() == "":
@@ -482,35 +474,6 @@ class EMS(object):
             with open(outfile, "w") as f:
                 f.write(block)
 
-        if prop_to_write == "nmr":
-            with open(outfile, 'r') as file:
-                content = file.read()
-            content = content.replace('$$$$', '')
-            with open(outfile, 'w') as file:
-                file.write(content)
-
-
-            with open(outfile, 'a') as f:
-                f.write('\n> <NMREDATA_ASSIGNMENT>\n')
-                for i, (typ, shift, var) in enumerate(zip(self.type, self.atom_properties['shift'], self.atom_properties['shift_var'])):
-                    line = f"{i+1:<5d}, {shift:<15.8f}, {typ:<5d}, {var:<15.8f}\\\n"
-                    f.write(line)
-
-                f.write('\n> <NMREDATA_J>\n')
-                num_atoms = len(self.type)
-                for i in range(num_atoms):
-                    for j in range(i + 1, num_atoms):  # avoid duplicate and self-pairs
-                        coupling = self.pair_properties['coupling'][i][j]
-                        if coupling == 0:
-                            continue
-                        label = self.pair_properties['coupling_types'][i][j]
-                        var = self.pair_properties['coupling_var'][i][j]
-                        line = f"{i+1:<10d}, {j+1:<10d}, {coupling:<15.8f}, {label:<10s}, {var:<15.8f}\n"
-                        f.write(line)
-
-                f.write("\n$$$$\n")
-
-            f.close()
 
 
 

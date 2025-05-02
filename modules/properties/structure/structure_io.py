@@ -357,7 +357,7 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
     return rdmol
 
 
-def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_delete=[], SDFversion="V3000"):
+def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, SDFversion="V3000"):
     '''
     This function is used to write an RDKit molecule object to an sdf block with specified molecule properties and SDF version.
     Here are some explanations and experiences for writing this function:
@@ -377,18 +377,11 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_
     - FileInfo (str): The file information of the molecule, referring to the _MolFileInfo property of the RDKit molecule object and the second line in the sdf file.
     - FileComment (str): The file comment of the molecule, referring to the _MolFileComments property of the RDKit molecule object and the third line in the sdf file.
     - tmp_file (str): The path of the temporary sdf file to store the sdf block.
-    - prop_to_delete (list): The list of properties to be deleted from the RDKit molecule object, so that these properties will not be written to the sdf file.
     - SDFversion (str): The version of the sdf file, which can be "V3000" or "V2000".
     '''
 
     # Set the _Name properties for the RDKit molecule objec, which refer to the first three lines in the sdf file
     rdmol.SetProp("_Name", MolName)
-
-    # Delete the properties assigned in the prop_to_delete list, so that the properties will not be written to the sdf file
-    if prop_to_delete is None:
-        prop_to_delete = []
-    for prop in prop_to_delete:
-        rdmol.ClearProp(prop)
 
     # Write the molecule to the sdf block with the specified SDF version
     with Chem.SDWriter(tmp_file) as writer:
