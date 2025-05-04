@@ -100,11 +100,11 @@ class EMS(object):
         self.adj = None                    # The adjacency matrix of the molecule. Shape: (n_atoms, n_atoms)
         self.path_topology = None          # Path length between atoms
         self.path_distance = None          # 3D distance between atoms
-        self.bond_existence = None         # Whether a bond exists between two atoms, made up of 0 or 1
         self.atom_properties = {}
         self.pair_properties = {}
         self.mol_properties = {}
         self.flat = None                   # Whether all the Z coordinates of the molecule is zero
+        self.pass_valence_check = None     # Whether the molecule has correct valence
         self.symmetric = None              # A string among 'sym', 'asym' and 'error' to indicate whether the non-hydrogen backbone of the molecule is symmetric
         self.nmr = nmr                     # Whether to read NMR data
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object

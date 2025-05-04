@@ -325,7 +325,7 @@ def nmr_to_sdf_block(atom_types, atom_properties, pair_properties):
 
     else:
         for i, (typ, shift, var) in enumerate(zip(atom_types, atom_properties['shift'], atom_properties['shift_var'])):
-            line = f"{i+1:<5d}, {shift:<15.8f}, {typ:<5d}, {var:<15.8f}\\"
+            line = f"{i:<5d}, {shift:<15.8f}, {typ:<5d}, {var:<15.8f}\\"
             atom_lines.append(line)
     
     atom_block = '\n'.join(atom_lines)
@@ -346,7 +346,7 @@ def nmr_to_sdf_block(atom_types, atom_properties, pair_properties):
                     continue
                 label = pair_properties['nmr_types'][i][j]
                 var = pair_properties['coupling_var'][i][j]
-                line = f"{i+1:<10d}, {j+1:<10d}, {coupling:<15.8f}, {label:<10s}, {var:<15.8f}"
+                line = f"{i:<10d}, {j:<10d}, {coupling:<15.8f}, {label:<10s}, {var:<15.8f}"
                 pair_lines.append(line)
 
     pair_block = '\n'.join(pair_lines)
