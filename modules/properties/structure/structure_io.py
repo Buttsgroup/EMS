@@ -78,17 +78,66 @@ def structure_from_rdmol(mol, kekulize=True):
     return type_array, xyz_array, conn_array
 
 
-def sdf_to_rdmol(file_path, mol_id, manual_read=False, streamlit=False):
+def structure_to_rdmol_NoConn(type_array, xyz_array):
+    '''
+    This function is used to convert the structure information: atom types and atom coordinates, to an RDKit molecule object.
+    The bond orders between atoms are not included in the structure information, so they will be determined by the RDKit function DetermineBonds.
+
+    Args:
+    - type_array (np.ndarray or list): The array of atom types, which is the atomic number of each atom. The shape is (num_atoms,).
+    - xyz_array (np.ndarray or list): The array of atom coordinates. The shape is (num_atoms, 3).
+    '''
+
+    # Check the types of type_array and xyz_array, and convert them to lists if they are numpy arrays
+    if type(type_array) != np.ndarray and type(type_array) != list:
+        logger.error(f"Invalid type for type_array: {type(type_array)}. The type_array should be a numpy array or a list.")
+        raise TypeError(f"Invalid type for type_array: {type(type_array)}. The type_array should be a numpy array or a list.")
+    if type(xyz_array) != np.ndarray and type(xyz_array) != list:
+        logger.error(f"Invalid type for xyz_array: {type(xyz_array)}. The xyz_array should be a numpy array or a list.")
+        raise TypeError(f"Invalid type for xyz_array: {type(xyz_array)}. The xyz_array should be a numpy array or a list.")
+
+    if type(type_array) == np.ndarray:
+        type_array = type_array.tolist()
+    if type(xyz_array) == np.ndarray:
+        xyz_array = xyz_array.tolist()
+    
+
+    # Create an RDKit molecule object and add atoms and coordinates to the molecule
+    mol = Chem.RWMol()
+    conf = Chem.Conformer(len(type_array))
+
+    atom_indices = []
+    for i, (atom, coord) in enumerate(zip(type_array, xyz_array)):
+        rd_atom = Chem.Atom(atom)
+        idx = mol.AddAtom(rd_atom)
+        conf.SetAtomPosition(idx, coord)
+        atom_indices.append(idx)
+
+    mol.AddConformer(conf)
+
+    # Determine and add bonds in the molecule
+    try:
+        DetermineBonds(mol)
+    except Exception as e:
+        logger.error(f"Fail to determine the bonds by DetermineBonds function")
+        raise e
+    
+    # Get the RDKit Mol object.
+    mol = mol.GetMol()
+    
+    return mol
+
+
+def sdf_to_rdmol(file_path, manual_read=False, streamlit=False):
     '''
     This function is used to read an sdf file and convert it to an RDKit molecule object.
     There are two modes to read the sdf file: by manual read and by Chem.ForwardSDMolSupplier.
     The manual read mode is only used for V2000 version SDF files. 
     It reads the SDF file line by line and manually adds atoms and bonds to the RDKit molecule, which is an alternative way when the Chem.ForwardSDMolSupplier mode fails.
-    The Chem.ForwardSDMolSupplier mode is the recommended way to read the sdf file, which is usually more stable and efficient.
+    The Chem.ForwardSDMolSupplier mode is the recommended and default way to read the sdf file, which is usually more stable and efficient.
 
     Args:
     - file_path (str): The path to the sdf file.
-    - mol_id (str): The id of the molecule, which is customized by the user.
     - manual_read (bool): Whether to read the sdf molecule manually or by Chem.ForwardSDMolSupplier. 
         If True, the function will read the sdf file line by line and manually add atoms and bonds to the RDKit molecule.
         If False, the function will read the sdf file by Chem.ForwardSDMolSupplier, which is the recommended way.
@@ -216,44 +265,6 @@ def sdf_to_rdmol(file_path, mol_id, manual_read=False, streamlit=False):
                 rdmol = mol
                 break
 
-
-    # The following section aims to set the _Name property for the molecule.
-    # The _Name property is chosen in the following order if not blank: mol.GetProp("_Name"), mol_id, mol.GetProp("FILENAME").
-    # The _Name property first searches the _Name property in the RDKit molecule object, which is the first line in the sdf block, 
-    # then the customized 'self.id' attribute (mol_id) in the EMS object, and finally the FILENAME property.
-    # The FILENAME property is not a standard property in the RDKit molecule object or the sdf file, but it is used in some sdf files in our lab.
-    # Since the FILENAME property is not a standard property, it is in the lowest priority.
-
-    # Get the molecule name from the _Name property
-    try:
-        NameProp = rdmol.GetProp("_Name")
-    except:
-        NameProp = None
-        logger.info(f"Fail to read _Name property in {file_path}")
-    
-    if type(NameProp) == str:
-        NameProp = NameProp.strip()
-
-    # Get the molecule name from the FILENAME property
-    try:
-        filename = rdmol.GetProp("FILENAME")
-    except:
-        filename = None
-        logger.info(f"FILENAME property not found in {file_path}")
-
-    if type(filename) == str:
-        filename = filename.strip()
-    
-    # Set the _Name property for the molecule according to the following order: NameProp, filename, mol_id
-    name_order = [NameProp, mol_id, filename]
-    name_order = [i for i in name_order if i is not None and i != ""]
-    
-    if len(name_order) == 0:
-        rdmol.SetProp("_Name", '')
-    else:
-        rdmol.SetProp("_Name", name_order[0])
-    
-
     # Check whether the RDKit molecule object is successfully read
     if rdmol is None:
         logger.error(f"Fail to read the molecule in the sdf file: {file_path}")
@@ -323,20 +334,43 @@ def xyz_to_rdmol(file_path):
         
         return mol
     
+
 # Dataframe read functionality
-def dataframe_to_rdmol(filtered_atom_df, filtered_pair_df):
+def dataframe_to_rdmol(filtered_atom_df, mol_name):
     '''
     This function is used to read a molecular dataframe and convert it to an RDKit molecule object.
 
     Args:
-    - filtered_atom_df: The atom dataframe
-    - filtered_pair_df: The pair dataframe
+    - filtered_atom_df (pd.DataFrame): The atom dataframe to be converted to an RDKit molecule object.
+    - mol_name (str): The name of the molecule.
     '''
-    mol_name=list(filtered_atom_df['molecule_name'])[0]
-    atom_types = filtered_atom_df['typestr'].tolist()
-    xyz_with_atom = [((x, y, z), atom) for (x, y, z), atom in zip(filtered_atom_df[['x', 'y', 'z']].to_numpy(), filtered_atom_df['typestr'])]
-    conn_matrix = np.array(filtered_atom_df['conn'].to_list(), dtype=int)
-    # Map integers to RDKit BondTypes
+
+    # Get the sub-dataframe for the molecule according to the molecule name
+    mol_atom_df = filtered_atom_df[filtered_atom_df['molecule_name'] == mol_name]
+
+    # Check whether the atom indexes in the molecule are continuous
+    # If not, that means two molecules in the atom dataframe share the same molecule name
+    mol_index = list(mol_atom_df.index)
+
+    continuous_check = True
+    for i in range(len(mol_index)-1):
+        if mol_index[i+1] - mol_index[i] != 1:
+            continuous_check = False
+            break
+
+    if not continuous_check:
+        logger.error(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
+        raise ValueError(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
+
+
+    # Get the atom coordinates, atom types and connectivity matrix from the atom dataframe
+    xyz = mol_atom_df[['x', 'y', 'z']].to_numpy().tolist()
+    atom_types = mol_atom_df['typestr'].tolist()
+
+    xyz_with_atom = [((x, y, z), atom) for (x, y, z), atom in zip(xyz, atom_types)]
+    conn_matrix = np.array(mol_atom_df['conn'].to_list(), dtype=int)
+
+    # Map integers in the connectivity matrix to RDKit BondTypes
     BondType_dict = {
         1: BondType.SINGLE,
         2: BondType.DOUBLE,
@@ -344,6 +378,7 @@ def dataframe_to_rdmol(filtered_atom_df, filtered_pair_df):
         4: BondType.AROMATIC
     }
     
+    # Get the atom indices in bonds and bond orders in the connectivity matrix
     bond_indices = [
         (i, j, BondType_dict.get(conn_matrix[i, j], BondType.SINGLE))
         for i in range(conn_matrix.shape[0])
@@ -351,6 +386,7 @@ def dataframe_to_rdmol(filtered_atom_df, filtered_pair_df):
         if conn_matrix[i, j] > 0
     ]
 
+    # Create an RDKit molecule object and add atoms, bonds and atom coordinates to the molecule
     mol = Chem.RWMol()
     conf = Chem.Conformer(len(xyz_with_atom))
     
@@ -364,15 +400,14 @@ def dataframe_to_rdmol(filtered_atom_df, filtered_pair_df):
     for idx1, idx2, bond in bond_indices:
         mol.AddBond(idx1, idx2, bond)
 
-        # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
-        mol.AddConformer(conf)
-        rdmol = mol.GetMol()
-        rdmol.SetProp("_NAME", mol_name)
+    # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
+    mol.AddConformer(conf)
+    rdmol = mol.GetMol()
     
     return rdmol
 
 
-def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_delete=[], SDFversion="V3000"):
+def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, SDFversion="V3000"):
     '''
     This function is used to write an RDKit molecule object to an sdf block with specified molecule properties and SDF version.
     Here are some explanations and experiences for writing this function:
@@ -392,18 +427,11 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, prop_to_
     - FileInfo (str): The file information of the molecule, referring to the _MolFileInfo property of the RDKit molecule object and the second line in the sdf file.
     - FileComment (str): The file comment of the molecule, referring to the _MolFileComments property of the RDKit molecule object and the third line in the sdf file.
     - tmp_file (str): The path of the temporary sdf file to store the sdf block.
-    - prop_to_delete (list): The list of properties to be deleted from the RDKit molecule object, so that these properties will not be written to the sdf file.
     - SDFversion (str): The version of the sdf file, which can be "V3000" or "V2000".
     '''
 
     # Set the _Name properties for the RDKit molecule objec, which refer to the first three lines in the sdf file
     rdmol.SetProp("_Name", MolName)
-
-    # Delete the properties assigned in the prop_to_delete list, so that the properties will not be written to the sdf file
-    if prop_to_delete is None:
-        prop_to_delete = []
-    for prop in prop_to_delete:
-        rdmol.ClearProp(prop)
 
     # Write the molecule to the sdf block with the specified SDF version
     with Chem.SDWriter(tmp_file) as writer:

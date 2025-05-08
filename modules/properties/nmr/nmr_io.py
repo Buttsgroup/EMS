@@ -15,7 +15,7 @@ logger.setLevel(logging.INFO)
 
 def nmr_read(stringfile, streamlit=False):
     '''
-    This function is used to read NMR data from an SDF file. When reading NMR data for an EMS object, the SDF file is the self.stringfile attribute.
+    This function is used to read NMR data from an SDF file. When reading NMR data for an EMS object, the SDF file is the self.file attribute.
     It reads the SDF file line by line and extracts the NMR data from the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> properties in the SDF file.
     Details of this function:
     (1) This function is designed to read NMR data from both V2000 and V3000 SDF files.
@@ -24,16 +24,16 @@ def nmr_read(stringfile, streamlit=False):
         and then reads the structure block to get the number of atom lines (before 'M  END' line). If the two numbers are not equal, an error will be raised.
 
     Args:
-    - stringfile (str): The SDF string if streamlit is on, or the path to the SDF file if streamlit is off.
-    - streamlit (bool): If True, the SDF file is as read as streamlit. If False (default), the SDF file is read as a file path.
+    - stringfile (str): The path to the SDF file, which is the self.file attribute of the EMS object.
+    - streamlit (bool): If True, the SDF file is as read as streamlit.
     '''
 
-    # Get the file as a list of lines
-    if not streamlit:
+    # Get the file as a list of lines. The streamlit part will be developed later.
+    if streamlit:
+        pass
+    else:
         with open(stringfile, "r") as f:
             lines = f.readlines()
-    else:
-        lines = [line for line in stringfile]
 
     # Initialize variables when reading the SDF file
     structure_end_check = False          # Check if the 'M  END' line or the end of structure information block is reached
@@ -236,3 +236,120 @@ def nmr_read_rdmol(rdmol, mol_id):
         coupling_var[int(item[2])][int(item[0])] = float(item[8])
     
     return shift_array, shift_var, coupling_array, coupling_var
+
+
+def nmr_read_df(atom_df, pair_df, mol_name):
+    '''
+    This function is used to read NMR data from atom and pair dataframes with the assigned molecule name.
+
+    Args:
+    - atom_df (pd.DataFrame): DataFrame containing atom-level NMR data.
+    - pair_df (pd.DataFrame): DataFrame containing pair-level NMR data.
+    - mol_name (str): The molecule to read NMR data for.
+    '''
+
+    # Get the atom and pair dataframes for the given molecule name
+    mol_atom_df = atom_df[atom_df['molecule_name'] == mol_name]
+    mol_pair_df = pair_df[pair_df['molecule_name'] == mol_name]
+
+    # Check whether the indexes in the molecule are continuous
+    # If not, that means two molecules in the dataframe share the same molecule name
+    atom_index = list(mol_atom_df.index)
+    pair_index = list(mol_pair_df.index)
+
+    atom_check = True
+    pair_check = True
+
+    for i in range(len(atom_index)-1):
+        if atom_index[i+1] - atom_index[i] != 1:
+            atom_check = False
+            break
+    
+    for i in range(len(pair_index)-1):
+        if pair_index[i+1] - pair_index[i] != 1:
+            pair_check = False
+            break
+    
+    if not (atom_check and pair_check):
+        logger.error(f"The indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.")
+        raise ValueError(f"The indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.")
+    
+
+    # Get the atom-level NMR parameters
+    num_atoms = len(atom_df)
+    shift = np.array(atom_df['shift'], dtype=np.float64)
+    shift_var = np.array(atom_df['shift_var'], dtype=np.float64)
+
+    if not (shift.ndim == 1 and shift_var.ndim == 1):
+        logger.error(f"Shift and shift variance arrays should be one-dimensional for molecule {mol_name}!")
+        raise ValueError(f"Shift and shift variance arrays should be one-dimensional for molecule {mol_name}!")
+    
+    if not (len(shift) == num_atoms and len(shift_var) == num_atoms):
+        logger.error(f"Shift and shift variance arrays should be the same length as the number of atoms for molecule {mol_name}!")
+        raise ValueError(f"Shift and shift variance arrays should be the same length as the number of atoms for molecule {mol_name}!")
+    
+    # Get the pair-level NMR parameters
+    coupling_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+    coupling_var_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+    coupling_types_mat = np.zeros((num_atoms, num_atoms), dtype=np.int32).astype(str)
+
+    i = np.array(pair_df['atom_index_0'], dtype=np.int32)
+    j = np.array(pair_df['atom_index_1'], dtype=np.int32)
+    coupling = np.array(pair_df['coupling'], dtype=np.float64)
+    coupling_var = np.array(pair_df['coupling_var'], dtype=np.float64)
+    coupling_types = np.array(pair_df['nmr_types'], dtype=str)
+    
+    coupling_mat[i, j] = coupling
+    coupling_var_mat[i, j] = coupling_var
+    coupling_types_mat[i, j] = coupling_types
+
+    # Return the NMR data
+    return shift, shift_var, coupling_mat, coupling_var_mat, coupling_types_mat
+
+
+def nmr_to_sdf_block(atom_types, atom_properties, pair_properties):
+    '''
+    This function reads the NMR data saved in EMS molecule's atom and pair properties and converts them to the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> sections in SDF block.
+
+    Args:
+    - atom_types (list): List of atom types of one EMS molecule
+    - atom_properties (dict): Dictionary of atom properties, including chemical shifts and their variances
+    - pair_properties (dict): Dictionary of pair properties, including coupling constants, their variances, and types
+    '''
+
+    # Create the SDF block for chemical shift data
+    atom_lines = []
+
+    if 'shift' not in atom_properties:
+        logger.warning('Chemical shift property not found in atom properties when writing to SDF block')
+
+    else:
+        for i, (typ, shift, var) in enumerate(zip(atom_types, atom_properties['shift'], atom_properties['shift_var'])):
+            line = f"{i:<5d}, {shift:<15.8f}, {typ:<5d}, {var:<15.8f}\\"
+            atom_lines.append(line)
+    
+    atom_block = '\n'.join(atom_lines)
+    
+
+    # Create the SDF block for coupling constant data
+    pair_lines = []
+
+    if 'coupling' not in pair_properties:
+        logger.warning('Coupling constant property not found in pair properties when writing to SDF block')
+
+    else:
+        num_atoms = len(atom_types)
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):  # avoid duplicate and self-pairs
+                coupling = pair_properties['coupling'][i][j]
+                if coupling == 0:
+                    continue
+                label = pair_properties['nmr_types'][i][j]
+                var = pair_properties['coupling_var'][i][j]
+                line = f"{i:<10d}, {j:<10d}, {coupling:<15.8f}, {label:<10s}, {var:<15.8f}"
+                pair_lines.append(line)
+
+    pair_block = '\n'.join(pair_lines)
+    
+    # Return the atom and pair lines in the SDF block
+    return atom_block, pair_block

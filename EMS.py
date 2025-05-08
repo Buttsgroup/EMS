@@ -1,4 +1,4 @@
-import numpy as np, pandas as pd
+import numpy as np
 import copy
 from io import StringIO
 import logging
@@ -7,12 +7,18 @@ from datetime import date
 import random
 import string
 
-from EMS.modules.properties.structure_io import structure_from_rdmol, sdf_to_rdmol, xyz_to_rdmol, rdmol_to_sdf_block, dataframe_to_rdmol
+from EMS.modules.properties.structure.structure_io import structure_from_rdmol
+from EMS.modules.properties.structure.structure_io import rdmol_to_sdf_block
+from EMS.modules.properties.file_io import file_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
-from EMS.modules.properties.nmr.nmr_io import nmr_read, nmr_read_rdmol
+from EMS.modules.properties.nmr.nmr_io import nmr_read
+from EMS.modules.properties.nmr.nmr_io import nmr_read_rdmol
+from EMS.modules.properties.nmr.nmr_io import nmr_read_df
+from EMS.modules.properties.nmr.nmr_io import nmr_to_sdf_block
+from EMS.modules.comp_chem.gaussian.gaussian_io import gaussian_read_nmr
+from EMS.modules.comp_chem.gaussian.gaussian_ops import scale_chemical_shifts
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
 
@@ -48,31 +54,27 @@ class EMS(object):
     The file type includes but not limited to SDF, XYZ, SMILES/SMARTS strings, and rdkit molecule objects.
 
     Args:
-    - file (str): The file path of the molecule file. If the molecule file is a SMILES/SMARTS string, the file is the string.
-        If the molecule is an rdkit molecule, the file is the rdkit molecule object.
-    - mol_id (str): The customized molecule id. The file name is preferred.
-    - line_notation (str): If the molecule file is a SMILES/SMARTS string, the line_notation is 'smiles' or 'smarts'. Default: None.
-    - rdkit_mol (bool): Whether to read the file as an rdkit molecule. Default: False.
+    - file: The file including the molecular structure and properties. Currently, the file type includes:
+        (1) str: Location of the file, such as .sdf and .xyz.
+        (2) str: SMILES/SMARTS string.
+        (3) rdkit.Chem.rdchem.Mol: The rdkit molecule object.
+        (4) tuple(pandas.DataFrame, pandas.DataFrame): The atom and pair dataframes including the molecular structure and properties.
+    - mol_id (str): The customized molecule id. Default: None.
+        This is a preferred name for the molecule. If not provided, the id will be set to the filename or official name of the file.
+        Details of the definition of filename for different file types are in EMS.modules.properties.file_io.
     - nmr (bool): Whether to read NMR data. Default: False.
-    - streamlit (bool): Whether to read the file from ForwardSDMolSupplier. Default: False.
+    - streamlit (bool): Whether to read the file from website. Default: False.
     - addHs (bool): Whether to add hydrogens to the rdkit molecule object. Default: False.
         If you are reading NMR data, addHs should be set to False.
     - sanitize (bool): Whether to sanitize the rdkit molecule object. Default: False.
         If you are reading NMR data, sanitize should be set to False.
     - kekulize (bool): Whether to kekulize the rdkit molecule object. Default: True.
-
-    More details about the EMS class can be found in the comments below.
     """
 
     def __init__(
         self,
-        file=None,                  # File path (optional if DataFrames are used)
+        file,                       # The file to read
         mol_id=None,                # Customized molecule ID
-        line_notation=None,         # 'smiles' or 'smarts'
-        rdkit_mol=False,            # Whether to read the file as an rdkit molecule
-        dataframe=False,            # Whether EMS objects are being read from a DataFrame
-        atom_df=None,               # Atom dataframe
-        pair_df=None,               # Pair dataframe
         nmr=False,                  # Whether to read NMR data
         streamlit=False,            # Streamlit mode is used to read the file from website
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
@@ -80,152 +82,50 @@ class EMS(object):
         kekulize=True               # Whether to kekulize the rdkit molecule object
     ):
 
-        
-        # To initialize self.id, self.filename, self.file and self.stringfile
-        # (1) If the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
-        # (2) If the molecule file is streamlit, which is used to read the file from website, self.id is the customized 'mol_id' name,
-        #     and self.filename, self.file and self.stringfile are achieved from the 'file' object
-        # (3) If the molecule file is neither SMILES/SMARTS string or streamlit but saved in a file like .sdf, self.id is the customized 'mol_id' name, 
-        #     self.file and self.stringfile are the file path, and self.filename is the file name seperated by '/' in the file path
-        # (4) If the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customized 'mol_id' name
-        if line_notation:
-            self.id = file
-        elif dataframe:
-            self.id = list(atom_df['molecule_name'])[0]
-        else:
-            self.id = mol_id
 
-        if line_notation:
-            self.filename = file
-        elif streamlit and not line_notation:
-            self.filename = file.name
-        elif rdkit_mol:
-            self.filename = mol_id
-        else:
-            self.filename = file.split('/')[-1]
-        
-        if rdkit_mol:
-            self.file = mol_id
-        else:
-            self.file = file
+        # Initialize the attributes to save the file, the file type and the RDKit molecule object
+        self.file = file                   # The file to read
+        self.filetype = None               # The file type of the file to read
+        self.rdmol = None                  # The rdkit molecule object that will be generated from the file
+        self.streamlit = streamlit         # Streamlit mode is used to read the file from website
 
-        if streamlit and not line_notation:
-            self.stringfile = StringIO(file.getvalue().decode("utf-8"))
-        elif rdkit_mol:
-            self.stringfile = mol_id
-        else:
-            self.stringfile = file
+        # Initialize the attributes to save the molecule id and the official filename
+        self.id = mol_id                   # The customized molecule id
+        self.filename = None               # The official name of the file to read
 
         # Initialize the molecular structure and properties as empty
-        self.rdmol = None                  # The rdkit molecule object of the molecule
         self.type = None                   # The atomic numbers of the atoms in the molecule. Shape: (n_atoms,)
         self.xyz = None                    # The 3D coordinates of the molecule. Shape: (n_atoms, 3)
         self.conn = None                   # The bond order matrix of the molecule. Shape: (n_atoms, n_atoms)
         self.adj = None                    # The adjacency matrix of the molecule. Shape: (n_atoms, n_atoms)
         self.path_topology = None          # Path length between atoms
         self.path_distance = None          # 3D distance between atoms
-        self.bond_existence = None         # Whether a bond exists between two atoms, made up of 0 or 1
         self.atom_properties = {}
         self.pair_properties = {}
         self.mol_properties = {}
         self.flat = None                   # Whether all the Z coordinates of the molecule is zero
-        self.symmetric = None              # Whether the non-hydrogen backbone of the molecule is symmetric
-        self.streamlit = streamlit
+        self.pass_valence_check = None     # Whether the molecule has correct valence
+        self.symmetric = None              # A string among 'sym', 'asym' and 'error' to indicate whether the non-hydrogen backbone of the molecule is symmetric
+        self.nmr = nmr                     # Whether to read NMR data
+        self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
 
-        # get the rdmol object from the file
-        # If the molecule file is a SMILES/SMARTS string, the rdmol object is generated from the string
-        if line_notation:
-            line_mol = None
 
-            if line_notation == "smiles":
-                try:
-                    line_mol = Chem.MolFromSmiles(file)
-                except Exception as e:
-                    logger.error(f"Error in calling Chem.MolFromSmiles: {file}")
-                    raise e
+        # Achieve the filetype, RDKit molecule object and its filename
+        # The filename is the official name of the file to read.
+        # Details of the definition of filename for different file types are in EMS.modules.properties.file_io
+        self.filetype, self.filename, self.rdmol = file_to_rdmol(self.file, mol_id=self.id, streamlit=self.streamlit)
 
-            elif line_notation == "smarts":
-                try:
-                    line_mol = Chem.MolFromSmarts(file)
-                except Exception as e:
-                    logger.error(f"Error in calling Chem.MolFromSmarts: {file}")
-                    raise e
-
-            else:
-                logger.error(f"Line notation, {line_notation}, not supported")
-                raise ValueError(f"Line notation, {line_notation}, not supported")
-            
-            if line_mol is None:
-                logger.error(f"Fail to read the molecule from string by RDKit: {file}")
-                raise ValueError(f"Fail to read the molecule from string by RDKit: {file}")
-
-            try:
-                Chem.SanitizeMol(line_mol)
-                line_mol = Chem.AddHs(line_mol)
-                Chem.Kekulize(line_mol)
-                AllChem.EmbedMolecule(line_mol)              # obtain the initial 3D structure for a molecule
-                self.rdmol = line_mol
-            except Exception as e:
-                logger.error(f"Fail to process the rdkit molecule object transformed from SMILES/SMARTS string by RDKit: {file}")
-                raise e
-        
-        # If the molecule file is an rdkit molecule, the rdmol object is the molecule itself
-        elif rdkit_mol:
-            self.rdmol = file
-        
-        # If the molecule is a dataframe, an rdmol object is generated
-        elif dataframe:
-            self.rdmol = dataframe_to_rdmol(atom_df, pair_df)
-            self.rdmol.SetProp("_Name", self.id)
-
-        # If the molecule is saved in a file, the rdmol object is generated from the file
-        else:
-            ftype = self.filename.split(".")[-1]
-            
-            if ftype == "sdf":
-                if streamlit:
-                    self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=True)     # Leave the streamlit mode blank for future use
-                else:
-                    self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=False)
-
-            elif ftype == "xyz":
-                try:
-                    self.rdmol = xyz_to_rdmol(self.file)
-                except Exception as e:
-                    logger.error(f"Fail to read the xyz file: {self.file}")
-                    raise e
-
-            elif ftype == "mol2":
-                self.rdmol = Chem.MolFromMol2File(
-                    self.file, removeHs=False, sanitize=self.sanitize
-                )
-
-            elif ftype == "mae":
-                for mol in Chem.MaeMolSupplier(
-                    self.file, removeHs=False, sanitize=self.sanitize
-                ):
-                    if mol is not None:
-                        if mol.GetProp("_Name") is None:
-                            mol.SetProp("_Name", self.id)
-                        self.rdmol = mol
-
-            elif ftype == "pdb":
-                self.rdmol = Chem.MolFromPDBFile(
-                    self.file, removeHs=False, sanitize=False
-                )
-                
-            # Add file reading for ASE molecules with '.traj' extension when available
-
-            else:
-                logger.error(f"File type, {ftype} not supported")
-                raise ValueError(f"File type, {ftype} not supported")
+        # Assign the official name (filename) of the file to read to self.id if self.id is None
+        if self.id is None or self.id == "":
+            self.id = self.filename
 
         # Check if self.rdmol is read correctly from the file as an rdkit molecule object
         if not isinstance(self.rdmol, Chem.rdchem.Mol):
-            logger.error(f"File {self.file} not read correctly to rdkit molecule object")
-            raise TypeError(f"File {self.file} not read correctly to rdkit molecule object")
+            logger.error(f"Fail to read RDKit molecule from {self.id}")
+            raise TypeError(f"Fail to read RDKit molecule from {self.id}")
+        
         
         # Add hydrogens to the rdkit molecule object
         if addHs:
@@ -268,44 +168,91 @@ class EMS(object):
         # The error may be caused by wrong explicit valences which are greater than permitted
         self.symmetric = self.check_symmetric()
         
+        
         # Get NMR properties
-        if nmr:
-            if dataframe:
-                # Atom-level NMR properties
-                num_atoms = len(atom_df)
-                shift = np.array(atom_df['shift'], dtype=np.float64)
-                shift_var = np.zeros(num_atoms, dtype=np.float64)
-                # Pair-level NMR properties
-                coupling_array = np.zeros((num_atoms, num_atoms), dtype=np.float64)
-                coupling_len = np.zeros((num_atoms, num_atoms), dtype=object)
-                coupling_vars = np.zeros((num_atoms, num_atoms), dtype=np.float64)
-                i, j, coupling, pl = pair_df['atom_index_0'].to_numpy(), pair_df['atom_index_1'].to_numpy(), pair_df['coupling'].to_numpy(), pair_df['nmr_types'].to_numpy()
-                coupling_array[i, j] = coupling
-                coupling_len[i, j] = pl
+        if self.nmr:
+            # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
+            self.get_coupling_types()       
 
-                self.pair_properties["coupling_types"] = coupling_len
+            # Read NMR data if self.file is atom and pair dataframes
+            # The difference between pair_properties["nmr_types"] and pair_properties["nmr_types_df"] is:
+            # (1) pair_properties["nmr_types"] is the matrix of coupling types between every two atoms, so distant atoms are also included, like '11JCH'
+            # (2) pair_properties["nmr_types_df"] is the matrix of coupling types only based on the atom pairs in the pair dataframe. 
+            #     If the dataframe is a 6-path one, atom pairs with 7 or more bonds are not included, like '7JCH'. The not-included atom pairs are set to a '0' string.
+            if self.filetype == "dataframe":
+                try:
+                    atom_df = file[0]
+                    pair_df = file[1]
+                    shift, shift_var, coupling_array, coupling_vars, coupling_types = nmr_read_df(atom_df, pair_df, self.filename)
+
+                    self.pair_properties["nmr_types_df"] = coupling_types
+
+                    # Check if the non-zero elements of pair_properties["nmr_types_df"] also exists in pair_properties["nmr_types"]
+                    nmr_type_mask = self.pair_properties["nmr_types_df"] != '0'
+                    nmr_types_match = self.pair_properties["nmr_types_df"] == self.pair_properties["nmr_types"]
+
+                    if not (nmr_types_match == nmr_type_mask).all():
+                        logger.warning(f"Some coupling types in pair_properties['nmr_types_df'] do not match with pair_properties['nmr_types'] for molecule {self.id}")
+                
+                except Exception as e:
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from dataframe')
+                    raise e
             
+
+            # Read NMR data if self.file is an RDKit molecule object
+            elif self.filetype == "rdmol":
+                try:
+                    shift, shift_var, coupling_array, coupling_vars = nmr_read_rdmol(self.rdmol, self.id)
+                except Exception as e:
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
+                    raise e
+            
+
+            # Read NMR data if self.file is an SDF file
+            elif self.filetype == 'sdf':
+                try:
+                    shift, shift_var, coupling_array, coupling_vars = nmr_read(self.file, self.streamlit)
+                except Exception as e:
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from SDF file {self.file}')
+                    raise e
+            
+
+            # Read NMR data if self.file is a Gaussian .log file
+            elif self.filetype == 'gaussian-log':
+                try:
+                    shift, coupling_array = gaussian_read_nmr(self.file)
+                    shift_var = np.zeros_like(shift)
+                    coupling_vars = np.zeros_like(coupling_array)
+                except Exception as e:
+                    logger.error(f'Fail to read NMR data for molecule {self.id} from Gaussian .log file {self.file}')
+                    raise e
+
+
+            # Raise error if the file type is not among the above
             else:
-                self.get_coupling_types()       # Generate self.pair_properties["nmr_types"]
+                logger.error(f'File {self.id} with file type {self.filetype} is not supported for reading NMR data')
+                raise ValueError(f'File {self.id} with file type {self.filetype} is not supported for reading NMR data')
 
-                if rdkit_mol:
-                    try:
-                        shift, shift_var, coupling_array, coupling_vars = nmr_read_rdmol(self.rdmol, self.id)
-                    except Exception as e:
-                        logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
-                        raise e
 
-                else:
-                    try:
-                        shift, shift_var, coupling_array, coupling_vars = nmr_read(self.stringfile, self.streamlit)
-                    except Exception as e:
-                        logger.error(f'Fail to read NMR data for molecule {self.id} from file {self.stringfile}')
-                        raise e
+            # If file type is 'gaussian-log', save the unscaled shift values in the "raw_shift" attribute of atom properties
+            # Then save the scaled shift values in the "shift" attribute
+            # The coupling values generally don't need to be scaled, so save them in the "coupling" attribute
+            if self.filetype == 'gaussian-log':
+                self.atom_properties["raw_shift"] = shift
+                self.atom_properties["shift_var"] = shift_var
+                self.pair_properties["coupling"] = coupling_array
+                self.pair_properties["coupling_var"] = coupling_vars
 
-            self.atom_properties["shift"] = shift
-            self.atom_properties["shift_var"] = shift_var
-            self.pair_properties["coupling"] = coupling_array
-            self.pair_properties["coupling_var"] = coupling_vars
+                self.atom_properties["shift"] = scale_chemical_shifts(shift, self.type)
+
+            # Assign the NMR data to the atom and pair properties for other file types
+            else:
+                self.atom_properties["shift"] = shift
+                self.atom_properties["shift_var"] = shift_var
+                self.pair_properties["coupling"] = coupling_array
+                self.pair_properties["coupling_var"] = coupling_vars
+
+            # Check if the length of the shift array is equal to the number of atoms in the molecule
             if len(self.atom_properties["shift"]) != len(self.type):
                 logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
                 raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
@@ -317,14 +264,16 @@ class EMS(object):
     def __repr__(self):
         return (
             f"EMS({self.id}, \n"
+            f"Filename: \n {self.filename}, \n"
+            f"Filetype: \n {self.filetype}, \n"
             f"SMILES: \n {self.mol_properties['SMILES']}, \n"
             f"xyz: \n {self.xyz}, \n"
-            f"types: \n {self.type}, \n"
-            f"conn: \n {self.conn}, \n"
-            f"Path Topology: \n {self.path_topology}, \n"
-            f"Path Distance: \n {self.path_distance}, \n"
-            f"Atom Properties: \n {self.atom_properties}, \n"
-            f"Pair Properties: \n {self.pair_properties}, \n"
+            f"Atom types: \n {self.type}, \n"
+            f"Atom connectivity: \n {self.conn}, \n"
+            f"Path topology: \n {self.path_topology}, \n"
+            f"Path distance: \n {self.path_distance}, \n"
+            f"Atom properties: \n {self.atom_properties}, \n"
+            f"Pair properties: \n {self.pair_properties}, \n"
             f")"
         )
 
@@ -337,8 +286,6 @@ class EMS(object):
         (3) The molecule is not a single molecule, but a mixture of molecules, which is indicated by '.' in the SMILES string
         (4) The RDKit atom method GetImplicitValence() raises an error when reading the implicit valence of the atom
         (5) The implicit valence of one atom is not zero
-
-        The cause of (4) may be that the molecule is not 'suitably' sanitized.
         """
 
         check = True
@@ -376,6 +323,7 @@ class EMS(object):
             
         return check
     
+
     def check_Zcoords_zero(self, threshold=1e-3):
         """
         Check if all the Z coordinates of the molecule are zero. 
@@ -388,11 +336,12 @@ class EMS(object):
         else:
             return False
 
+
     def check_symmetric(self):
         """
         Check if the non-hydrogen backbone of the molecule is symmetric. 
-        If the non-hydrogen backbone is symmetric/asymmetric, check_symmetric will give a False/True.
-        If the method raises an error, check_symmetric will give an 'Error'. 
+        If the non-hydrogen backbone is symmetric/asymmetric, check_symmetric will give a 'sym'/'asym'.
+        If the method raises an error, check_symmetric will give an 'error'. 
         Attention: This method is not for checking 3D symmetry, but only the 2D non-hydrogen backbone.
         """
 
@@ -403,14 +352,15 @@ class EMS(object):
             canonical_ranking = list(rdmolfiles.CanonicalRankAtoms(mol, breakTies=False))
             
             if len(canonical_ranking) == len(set(canonical_ranking)):
-                return False
+                return 'asym'
             else:
-                return True
+                return 'sym'
         
         except Exception as e:
             logger.error(f'Symmetry check fails for molecule {self.id}, due to wrong explicit valences which are greater than permitted')
             logger.info('Symmetry check failure due to wrong explicit valences needs to be fixed...')
-            return 'Error'
+            return 'error'
+
 
     def get_graph_distance(self):
         """
@@ -424,6 +374,7 @@ class EMS(object):
         except Exception as e:
             logger.error(f"Fail to get the path length matrix and 3D distance matrix for molecule {self.id}")
             raise e
+
 
     def get_coupling_types(self) -> None:
         """
@@ -461,101 +412,91 @@ class EMS(object):
                 tmp_types.append(targetflag)
             cpl_types.append(tmp_types)
 
-        self.pair_properties["nmr_types"] = cpl_types
+        self.pair_properties["nmr_types"] = np.array(cpl_types, dtype=str)
 
-    def to_sdf(self, outfile, FileComments='', prop_to_write='all', SDFversion="V3000"):
+
+    def to_sdf(self, outfile='', FileComments='', prop_to_write=None, prop_cover=False, SDFversion="V3000"):
         """
         Write the emol object to an SDF file with assigned properties.
         The first line is the SDF file name, which is defaulted to the _Name property of the RDKit molecule. If the _Name property is empty, self.id will be used.
         The second line is the SDF file information, which is defaulted to 'EMS (Efficient Molecular Storage) - <year> - ButtsGroup'.
         The third line is the SDF file comments, which is defaulted to blank.
         The properties to write to the SDF file and the SDF version can be customized.
-        V3000 is default and V2000 is not recommended for molecules with more than 99 atoms. If the atom number is greater than 999, V3000 will be used.
 
         Args:
         - outfile (str): The file path to save the SDF file. If outfile is None or blank string "", the SDF block will be returned.
         - FileComments (str): The comments to write to the third line of the SDF file.
-        - prop_to_write (str or list): The properties to write to the SDF file. If prop_to_write is None, no property will be written.
-            If prop_to_write is "all", all the properties of the RDKit molecule will be written.
-            If prop_to_write is "nmr", only the NMR properties (NMREDATA_ASSIGNMENT and NMREDATA_J) will be written.
+        - prop_to_write (str or list): The properties to write to the SDF file. 
+            If prop_to_write is None, no property will be written.
+            If prop_to_write is "nmr", the NMR properties saved in self.atom_properties and self.pair_properties will be written in NMREDATA_ASSIGNMENT and NMREDATA_J sections.
+        - prop_cover (bool): Whether to cover the existing properties in the SDF file. 
         - SDFversion (str): The version of the SDF file. The version can be "V2000" or "V3000".
         """
         
         # Deep copy the rdmol object
         rdmol = copy.deepcopy(self.rdmol)
 
-        # Get the _Name property of the RDKit molecule to write to the first line of the SDF file. If the _Name property is empty, set it to the emol id.
+        # Set the first line of the SDF file to the molecule name in the order of _Name property of self.rdmol, self.filename and self.id
         try:
-            rdmol_Name = rdmol.GetProp("_Name")
-            if rdmol_Name.strip() == "":
-                if self.id is None:
-                    rdmol_Name = ""
-                else:
-                    rdmol_Name = self.id
+            rdmol_Name = rdmol.GetProp("_Name").strip()
         except:
-            logger.warning(f"Fail to get the _Name property of the RDKit molecule. The molecule id will be used instead.")
-            if self.id is None:
-                rdmol_Name = ""
-            else:
-                rdmol_Name = self.id
+            rdmol_Name = ""
 
+        name_list = [rdmol_Name, self.filename, self.id]
+        name_list = [name for name in name_list if name != None and name != ""]
+
+        if len(name_list) == 0:
+            sdf_Name = ""
+        else:
+            sdf_Name = name_list[0]
+        
         # Get the _MolFileInfo property of the RDKit molecule to write to the second line of the SDF file.
-        rdmol_MolFileInfo = f'EMS (Efficient Molecular Storage) - {date.today().year} - ButtsGroup'
+        sdf_MolFileInfo = f'EMS (Efficient Molecular Storage) - {date.today().year} - ButtsGroup'
 
         # Get the _MolFileComments property of the RDKit molecule to write to the third line of the SDF file.
-        rdmol_MolFileComments = FileComments
+        sdf_MolFileComments = FileComments
 
         # Set the name of the temporary SDF file to save the RDKit molecule
-        #characters = string.ascii_letters + string.digits  
-        #random_string = ''.join(random.choices(characters, k=30))
-        #tmp_sdf_file = f"tmp_{random_string}.sdf"
-        tmp_sdf_file='tmp_sdf_file.sdf'
+        characters = string.ascii_letters + string.digits  
+        random_string = ''.join(random.choices(characters, k=30))
+        tmp_sdf_file = f"tmp_{random_string}.sdf"
 
         # Set the SDF file version according to the atom number of the RDKit molecule
         atom_num = len(self.type)
         SDFversion = SDFversion
 
-        if SDFversion == "V2000":
-            logger.info(f"V2000 is not recommended for writing molecules. Try using V3000 instead.")
-
-            if atom_num > 999:
-                logger.error(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
-                SDFversion = "V3000"
-
-            elif atom_num > 99:
-                logger.warning(f"V2000 may cause reading failure for molecules with more than 99 atoms. Try using V3000 instead.")
-            
-            else:
-                logger.info(f"V2000 is being used for molecules with less than 100 atoms.")
+        if SDFversion == "V2000" and atom_num > 999:
+            logger.warning(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
+            SDFversion = "V3000"
         
-        elif SDFversion == "V3000":
-            logger.info(f"V3000 is being used.")
-        
-        else:
-            logger.error(f"SDF version {SDFversion} is not supported. SDF version is set to V3000.")
+        if SDFversion not in ["V2000", "V3000"]:
+            logger.warning(f"SDF version {SDFversion} is not supported. SDF version is set to V3000.")
             SDFversion = "V3000"
         
         # Set the properties to write to the SDF file
-        prop_to_write = prop_to_write
-        origin_prop = list(rdmol.GetPropsAsDict().keys())
-        
-        '''if prop_to_write is None:
+        if prop_to_write is None:
             prop_to_write = []
-        
-        elif prop_to_write == "all":
-            prop_to_write = origin_prop
-        
-        elif prop_to_write == "nmr":
-            prop_to_write = ["NMREDATA_ASSIGNMENT", "NMREDATA_J"]
-        
-        elif type(prop_to_write) != list:
-            logger.error(f"The roperty to write: {prop_to_write}, is not supported. All original properties will be written to the SDF file.")
-            prop_to_write = origin_prop
-        '''
-        prop_to_delete = list(set([prop for prop in origin_prop if prop not in prop_to_write]))
-    
+        elif type(prop_to_write) == str:
+            prop_to_write = [prop_to_write]
+
+        origin_prop = list(rdmol.GetPropsAsDict().keys())
+
+        for prop in prop_to_write:
+            # Write NMR properties to the SDF file
+            if prop == "nmr":
+                atom_lines, pair_lines = nmr_to_sdf_block(self.type, self.atom_properties, self.pair_properties)
+
+                if prop_cover:
+                    rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
+                    rdmol.SetProp("NMREDATA_J", pair_lines)
+                else:
+                    if not "NMREDATA_ASSIGNMENT" in origin_prop:
+                        rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
+                    if not "NMREDATA_J" in origin_prop:
+                        rdmol.SetProp("NMREDATA_J", pair_lines)
+
         # Get the SDF block of the RDKit molecule
-        block = rdmol_to_sdf_block(rdmol, rdmol_Name, rdmol_MolFileInfo, rdmol_MolFileComments, tmp_sdf_file, prop_to_delete=prop_to_delete, SDFversion=SDFversion)
+        block = rdmol_to_sdf_block(rdmol, sdf_Name, sdf_MolFileInfo, sdf_MolFileComments, tmp_sdf_file, SDFversion=SDFversion)
 
         # Write the SDF block to the SDF file
         if outfile is None or outfile.strip() == "":
@@ -564,35 +505,193 @@ class EMS(object):
             with open(outfile, "w") as f:
                 f.write(block)
 
-        if prop_to_write == "nmr":
-            with open(outfile, 'r') as file:
-                content = file.read()
-            content = content.replace('$$$$', '')
-            with open(outfile, 'w') as file:
-                file.write(content)
 
 
-            with open(outfile, 'a') as f:
-                f.write('\n> <NMREDATA_ASSIGNMENT>\n')
-                for i, (typ, shift, var) in enumerate(zip(self.type, self.atom_properties['shift'], self.atom_properties['shift_var'])):
-                    line = f"{i+1:<5d}, {shift:<15.8f}, {typ:<5d}, {var:<15.8f}\\\n"
-                    f.write(line)
 
-                f.write('\n> <NMREDATA_J>\n')
-                num_atoms = len(self.type)
-                for i in range(num_atoms):
-                    for j in range(i + 1, num_atoms):  # avoid duplicate and self-pairs
-                        coupling = self.pair_properties['coupling'][i][j]
-                        if coupling == 0:
-                            continue
-                        label = self.pair_properties['coupling_types'][i][j]
-                        var = self.pair_properties['coupling_var'][i][j]
-                        line = f"{i+1:<10d}, {j+1:<10d}, {coupling:<15.8f}, {label:<10s}, {var:<15.8f}\n"
-                        f.write(line)
 
-                f.write("\n$$$$\n")
 
-            f.close()
+
+
+
+
+
+
+
+
+
+
+
+
+################ The following section includes the old version of the __init__ method in EMS ################
+
+    # def __init__(
+    #     self,
+    #     file=None,                  # File path (optional if DataFrames are used)
+    #     mol_id=None,                # Customized molecule ID
+    #     line_notation=None,         # 'smiles' or 'smarts'
+    #     rdkit_mol=False,            # Whether to read the file as an rdkit molecule
+    #     dataframe=False,            # Whether EMS objects are being read from a DataFrame
+    #     atom_df=None,               # Atom dataframe
+    #     pair_df=None,               # Pair dataframe
+    #     nmr=False,                  # Whether to read NMR data
+    #     streamlit=False,            # Streamlit mode is used to read the file from website
+    #     addHs=False,                # Whether to add hydrogens to the rdkit molecule object
+    #     sanitize=False,             # Whether to sanitize the rdkit molecule object
+    #     kekulize=True               # Whether to kekulize the rdkit molecule object
+    # ):
+
+
+    #     # To initialize self.id, self.filename, self.file and self.stringfile
+    #     # (1) If the molecule file is SMILES or SMARTS string, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the string
+    #     # (2) If the molecule file is streamlit, which is used to read the file from website, self.id is the customized 'mol_id' name,
+    #     #     and self.filename, self.file and self.stringfile are achieved from the 'file' object
+    #     # (3) If the molecule file is neither SMILES/SMARTS string or streamlit but saved in a file like .sdf, self.id is the customized 'mol_id' name, 
+    #     #     self.file and self.stringfile are the file path, and self.filename is the file name seperated by '/' in the file path
+    #     # (4) If the molecule is an rdkit molecule, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the customized 'mol_id' name
+    #     # (5) If the molecule is a dataframe, all of self.id, self.filename, self.file and self.stringfile are the same, i.e. the first 'molecule_name' item in the atom_df dataframe
+    #     if line_notation:
+    #         self.id = file
+    #     elif dataframe:
+    #         self.id = list(atom_df['molecule_name'])[0]
+    #     else:
+    #         self.id = mol_id
+
+    #     if line_notation:
+    #         self.filename = file
+    #     elif streamlit and not line_notation:
+    #         self.filename = file.name
+    #     elif rdkit_mol:
+    #         self.filename = mol_id
+    #     elif dataframe:
+    #         self.filename = self.id
+    #     else:
+    #         self.filename = file.split('/')[-1]
+        
+    #     if rdkit_mol:
+    #         self.file = mol_id
+    #     elif dataframe:
+    #         self.file = self.id
+    #     else:
+    #         self.file = file
+
+    #     if streamlit and not line_notation:
+    #         self.stringfile = StringIO(file.getvalue().decode("utf-8"))
+    #     elif rdkit_mol:
+    #         self.stringfile = mol_id
+    #     elif dataframe:
+    #         self.stringfile = self.id
+    #     else:
+    #         self.stringfile = file
+
+    #     # Initialize the molecular structure and properties as empty
+    #     self.rdmol = None                  # The rdkit molecule object of the molecule
+    #     self.type = None                   # The atomic numbers of the atoms in the molecule. Shape: (n_atoms,)
+    #     self.xyz = None                    # The 3D coordinates of the molecule. Shape: (n_atoms, 3)
+    #     self.conn = None                   # The bond order matrix of the molecule. Shape: (n_atoms, n_atoms)
+    #     self.adj = None                    # The adjacency matrix of the molecule. Shape: (n_atoms, n_atoms)
+    #     self.path_topology = None          # Path length between atoms
+    #     self.path_distance = None          # 3D distance between atoms
+    #     self.bond_existence = None         # Whether a bond exists between two atoms, made up of 0 or 1
+    #     self.atom_properties = {}
+    #     self.pair_properties = {}
+    #     self.mol_properties = {}
+    #     self.flat = None                   # Whether all the Z coordinates of the molecule is zero
+    #     self.symmetric = None              # Whether the non-hydrogen backbone of the molecule is symmetric
+    #     self.streamlit = streamlit
+    #     self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
+    #     self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
+
+    #     # get the rdmol object from the file
+    #     # If the molecule file is a SMILES/SMARTS string, the rdmol object is generated from the string
+    #     if line_notation:
+    #         line_mol = None
+
+    #         if line_notation == "smiles":
+    #             try:
+    #                 line_mol = Chem.MolFromSmiles(file)
+    #             except Exception as e:
+    #                 logger.error(f"Error in calling Chem.MolFromSmiles: {file}")
+    #                 raise e
+
+    #         elif line_notation == "smarts":
+    #             try:
+    #                 line_mol = Chem.MolFromSmarts(file)
+    #             except Exception as e:
+    #                 logger.error(f"Error in calling Chem.MolFromSmarts: {file}")
+    #                 raise e
+
+    #         else:
+    #             logger.error(f"Line notation, {line_notation}, not supported")
+    #             raise ValueError(f"Line notation, {line_notation}, not supported")
+            
+    #         if line_mol is None:
+    #             logger.error(f"Fail to read the molecule from string by RDKit: {file}")
+    #             raise ValueError(f"Fail to read the molecule from string by RDKit: {file}")
+
+    #         try:
+    #             Chem.SanitizeMol(line_mol)
+    #             line_mol = Chem.AddHs(line_mol)
+    #             Chem.Kekulize(line_mol)
+    #             AllChem.EmbedMolecule(line_mol)              # obtain the initial 3D structure for a molecule
+    #             self.rdmol = line_mol
+    #         except Exception as e:
+    #             logger.error(f"Fail to process the rdkit molecule object transformed from SMILES/SMARTS string by RDKit: {file}")
+    #             raise e
+        
+    #     # If the molecule file is an rdkit molecule, the rdmol object is the molecule itself
+    #     elif rdkit_mol:
+    #         self.rdmol = file
+        
+    #     # If the molecule is a dataframe, an rdmol object is generated
+    #     # The molecule name is self.id and is assigned to self.rdmol in dataframe_to_rdmol function
+    #     elif dataframe:
+    #         try:
+    #             self.rdmol = dataframe_to_rdmol(atom_df, self.id)
+    #         except Exception as e:
+    #             logger.error(f"Fail to read the molecule from dataframe: {self.id}")
+    #             raise e
+
+    #     # If the molecule is saved in a file, the rdmol object is generated from the file
+    #     else:
+    #         ftype = self.filename.split(".")[-1]
+            
+    #         if ftype == "sdf":
+    #             if streamlit:
+    #                 self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=True)     # Leave the streamlit mode blank for future use
+    #             else:
+    #                 self.rdmol = sdf_to_rdmol(self.file, self.id, streamlit=False)
+
+    #         elif ftype == "xyz":
+    #             try:
+    #                 self.rdmol = xyz_to_rdmol(self.file)
+    #             except Exception as e:
+    #                 logger.error(f"Fail to read the xyz file: {self.file}")
+    #                 raise e
+
+    #         elif ftype == "mol2":
+    #             self.rdmol = Chem.MolFromMol2File(
+    #                 self.file, removeHs=False, sanitize=self.sanitize
+    #             )
+
+    #         elif ftype == "mae":
+    #             for mol in Chem.MaeMolSupplier(
+    #                 self.file, removeHs=False, sanitize=self.sanitize
+    #             ):
+    #                 if mol is not None:
+    #                     if mol.GetProp("_Name") is None:
+    #                         mol.SetProp("_Name", self.id)
+    #                     self.rdmol = mol
+
+    #         elif ftype == "pdb":
+    #             self.rdmol = Chem.MolFromPDBFile(
+    #                 self.file, removeHs=False, sanitize=False
+    #             )
+                
+    #         # Add file reading for ASE molecules with '.traj' extension when available
+
+    #         else:
+    #             logger.error(f"File type, {ftype} not supported")
+    #             raise ValueError(f"File type, {ftype} not supported")
 
 
 
