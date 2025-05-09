@@ -436,7 +436,7 @@ class EMS(object):
 
         self.pair_properties["nmr_types"] = cpl_types
 
-    def to_sdf(self, outfile, FileComments='', prop_to_write='all', SDFversion="V3000"):
+    def to_sdf(self, outfile=None, FileComments='', prop_to_write='all', SDFversion="V3000"):
         """
         Write the emol object to an SDF file with assigned properties.
         The first line is the SDF file name, which is defaulted to the _Name property of the RDKit molecule. If the _Name property is empty, self.id will be used.
