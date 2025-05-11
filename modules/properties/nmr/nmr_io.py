@@ -54,6 +54,19 @@ def nmr_read(stringfile, streamlit=False):
     coupling_len = None
     coupling_var = None
 
+    # Get the index of the first atom. Some files may have 1 as the first atom index, but this is not standard. The standard is 0.
+    index_check_shift_switch = False
+    first_atom_index = 0
+
+    for idx, line in enumerate(lines):
+        if "<NMREDATA_ASSIGNMENT>" in line:
+            index_check_shift_switch = True
+            continue
+
+        if index_check_shift_switch:
+            first_atom_index = int(line.split()[0])
+            break
+
     # Loop over the lines of the SDF file only once
     for idx, line in enumerate(lines):
 
@@ -138,8 +151,8 @@ def nmr_read(stringfile, streamlit=False):
                         int(items[0])
                     except:
                         continue
-                    shift_array[int(items[0])] = float(items[2])
-                    shift_var[int(items[0])] = float(items[6])
+                    shift_array[int(items[0]) - first_atom_index] = float(items[2])
+                    shift_var[int(items[0]) - first_atom_index] = float(items[6])
 
                 # If coupling assignment label found, process coupling rows
                 if cpl_switch:
@@ -151,12 +164,12 @@ def nmr_read(stringfile, streamlit=False):
                     except:
                         continue
                     length = int(items[6].strip()[0])
-                    coupling_array[int(items[0])][int(items[2])] = float(items[4])
-                    coupling_array[int(items[2])][int(items[0])] = float(items[4])
-                    coupling_var[int(items[0])][int(items[2])] = float(items[8])
-                    coupling_var[int(items[2])][int(items[0])] = float(items[8])
-                    coupling_len[int(items[0])][int(items[2])] = length
-                    coupling_len[int(items[2])][int(items[0])] = length
+                    coupling_array[int(items[0]) - first_atom_index][int(items[2]) - first_atom_index] = float(items[4])
+                    coupling_array[int(items[2]) - first_atom_index][int(items[0]) - first_atom_index] = float(items[4])
+                    coupling_var[int(items[0]) - first_atom_index][int(items[2]) - first_atom_index] = float(items[8])
+                    coupling_var[int(items[2]) - first_atom_index][int(items[0]) - first_atom_index] = float(items[8])
+                    coupling_len[int(items[0]) - first_atom_index][int(items[2]) - first_atom_index] = length
+                    coupling_len[int(items[2]) - first_atom_index][int(items[0]) - first_atom_index] = length
 
     # Raise errors if the following conditions are not met. These conditions make sure that the NMR data is correctly read.
     if structure_end_check == False:
@@ -201,6 +214,9 @@ def nmr_read_rdmol(rdmol, mol_id):
     except Exception as e:
         logger.error(f'No NMR data found for molecule {mol_id}')
         raise ValueError(f'No NMR data found for molecule {mol_id}')
+    
+    # Get the index of the first atom. Some files may have 1 as the first atom index, but this is not standard. The standard is 0.
+    first_atom_index = int(shift.split('\n')[0].split()[0])
 
     # Split the NMR data block into lines and then into items
     shift_items = []
@@ -224,16 +240,16 @@ def nmr_read_rdmol(rdmol, mol_id):
     # Shift assignment row looks like this
     #  0    , -33.56610000   , 8    , 0.00000000     \
     for item in shift_items:
-        shift_array[int(item[0])] = float(item[2])
-        shift_var[int(item[0])] = float(item[6])
+        shift_array[int(item[0]) - first_atom_index] = float(item[2])
+        shift_var[int(item[0]) - first_atom_index] = float(item[6])
     
     # Coupling row looks like this
     #  0         , 4         , -0.08615310    , 3JON      , 0.00000000
     for item in coupling_items:
-        coupling_array[int(item[0])][int(item[2])] = float(item[4])
-        coupling_array[int(item[2])][int(item[0])] = float(item[4])
-        coupling_var[int(item[0])][int(item[2])] = float(item[8])
-        coupling_var[int(item[2])][int(item[0])] = float(item[8])
+        coupling_array[int(item[0]) - first_atom_index][int(item[2]) - first_atom_index] = float(item[4])
+        coupling_array[int(item[2]) - first_atom_index][int(item[0]) - first_atom_index] = float(item[4])
+        coupling_var[int(item[0]) - first_atom_index][int(item[2]) - first_atom_index] = float(item[8])
+        coupling_var[int(item[2]) - first_atom_index][int(item[0]) - first_atom_index] = float(item[8])
     
     return shift_array, shift_var, coupling_array, coupling_var
 
