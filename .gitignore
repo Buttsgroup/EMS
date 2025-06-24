@@ -3,5 +3,3 @@
 *.pyc
 *.pytest_cache*
 run_EMS.py
-atom_df.pkl
-pair_df.pkl
