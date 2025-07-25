@@ -9,6 +9,7 @@ import string
 
 from EMS.modules.properties.structure.structure_io import structure_from_rdmol
 from EMS.modules.properties.structure.structure_io import rdmol_to_sdf_block
+from EMS.modules.properties.structure.structure_io import aromatic_bond_from_rdmol
 from EMS.modules.properties.file_io import file_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_io import nmr_read
@@ -97,6 +98,7 @@ class EMS(object):
         self.type = None                   # The atomic numbers of the atoms in the molecule. Shape: (n_atoms,)
         self.xyz = None                    # The 3D coordinates of the molecule. Shape: (n_atoms, 3)
         self.conn = None                   # The bond order matrix of the molecule. Shape: (n_atoms, n_atoms)
+        self.aromatic_conn = None          # The bond order matrix of the molecule, including aromatic bonds. Shape: (n_atoms, n_atoms)
         self.adj = None                    # The adjacency matrix of the molecule. Shape: (n_atoms, n_atoms)
         self.path_topology = None          # Path length between atoms
         self.path_distance = None          # 3D distance between atoms
@@ -153,6 +155,7 @@ class EMS(object):
 
         # Get the molecular structures
         self.type, self.xyz, self.conn = structure_from_rdmol(self.rdmol)
+        self.aromatic_conn = aromatic_bond_from_rdmol(self.rdmol)
         self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
         self.path_topology, self.path_distance = self.get_graph_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)

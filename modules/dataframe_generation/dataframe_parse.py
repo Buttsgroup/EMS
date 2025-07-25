@@ -105,6 +105,8 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
     path_len = []  # number of pairs between atoms (shortest path)
     pair_props = []
     bond_existence = []
+    aromatic_bond_order = []
+
     for propname in ems_list[0].pair_properties.keys():
         pair_props.append([])
 
@@ -125,6 +127,7 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
                 dist.append(ems.path_distance[t][t2])
                 path_len.append(int(ems.path_topology[t][t2]))
                 bond_existence.append(ems.adj[t][t2])
+                aromatic_bond_order.append(ems.aromatic_conn[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
                     pair_props[p].append(ems.pair_properties[prop][t][t2])
 
@@ -147,11 +150,14 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
         "distance": dist,
         "path_len": path_len,
         "bond_existence": bond_existence,
+        "bond_order": aromatic_bond_order,
     }
     for p, propname in enumerate(ems.pair_properties.keys()):
         pairs[propname] = pair_props[p]
 
     pairs = pd.DataFrame(pairs)
+    pairs.loc[pairs['bond_order'] == 1.5, 'bond_order'] = 4.0
+    pairs['bond_order'] = pairs['bond_order'].astype(int)
 
     pbar.close()
 

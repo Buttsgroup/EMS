@@ -78,6 +78,44 @@ def structure_from_rdmol(mol, kekulize=True):
     return type_array, xyz_array, conn_array
 
 
+def aromatic_bond_from_rdmol(mol):
+    '''
+    This function is used to extract the structure information: bond orders between atoms as arrays from an RDKit molecule object.
+    The aromatic bonds are included in the bond orders, and the bond order of an aromatic bond is 1.5.
+    
+    Args:
+    - rdmol: The RDKit molecule object to extract the structure information.
+   
+    Returns:
+    - aromatic_conn_array (np.ndarray): The array of bond orders between atoms. The shape is (num_atoms, num_atoms).
+    '''
+
+    rdmol = deepcopy(mol)
+
+    try:
+        Chem.SetAromaticity(rdmol)
+    except Exception as e:
+        logger.error(f"Fail to assign aromatic bonds to the molecule.")
+        raise e
+
+    aromatic_conn_array = np.zeros((rdmol.GetNumAtoms(), rdmol.GetNumAtoms()), dtype=np.float64)
+
+    # Loop over the atoms in the molecule
+    for i, atoms in enumerate(rdmol.GetAtoms()):
+        # Get the bond orders (including aromatic bonds) between atoms
+        for j, atoms in enumerate(rdmol.GetAtoms()):
+            if i == j:
+                continue
+
+            bond = rdmol.GetBondBetweenAtoms(i, j)
+            
+            if bond is not None:
+                aromatic_conn_array[i][j] = bond.GetBondTypeAsDouble()
+                aromatic_conn_array[j][i] = bond.GetBondTypeAsDouble()
+    
+    return aromatic_conn_array
+    
+
 def structure_to_rdmol_NoConn(type_array, xyz_array):
     '''
     This function is used to convert the structure information: atom types and atom coordinates, to an RDKit molecule object.
