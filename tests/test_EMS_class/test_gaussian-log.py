@@ -81,7 +81,7 @@ def test_gaussian_log_nmr():
     assert emol.pair_properties['nmr_types'].dtype == '<U4'
 
     # Test on a Gaussian log file when outputting to an SDF file
-    emol.to_sdf(outfile='tmp_testmol_gaussian_log_nmr.sdf', FileComments='Testing_gaussian_log_molecule_nmr', prop_cover=True, prop_to_write='nmr')
+    emol.to_file('sdf', outfile='tmp_testmol_gaussian_log_nmr.sdf', FileComments='Testing_gaussian_log_molecule_nmr')
     for mol in Chem.SDMolSupplier('tmp_testmol_gaussian_log_nmr.sdf', removeHs=False, sanitize=False):
         assert mol.GetProp('_Name') == ''
         assert mol.GetProp('_MolFileComments') == 'Testing_gaussian_log_molecule_nmr'

@@ -46,7 +46,7 @@ def test_xyz():
     assert emol.pair_properties == {}
 
     # Test on an XYZ file when outputting to an SDF file (1)
-    sdf_block = emol.to_sdf(outfile='', FileComments='Testing_xyz_molecule', prop_to_write=None)
+    sdf_block = emol.to_file('sdf', outfile='', FileComments='Testing_xyz_molecule')
     sdf_block_list = sdf_block.split('\n')
     assert type(sdf_block) == str
     assert sdf_block_list[0] == 'testmol_xyz'
@@ -54,7 +54,7 @@ def test_xyz():
     assert sdf_block_list[2] == 'Testing_xyz_molecule'
 
     # Test on an XYZ file when outputting to an SDF file (2)
-    emol.to_sdf(outfile='tmp_test_xyz.sdf', FileComments='', prop_to_write=None)
+    emol.to_file('sdf', outfile='tmp_test_xyz.sdf')
     with open('tmp_test_xyz.sdf', 'r') as f:
         sdf_block_2 = f.read()
     sdf_block_2_list = sdf_block_2.split('\n')

@@ -94,7 +94,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
+def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_type_limit=False):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -129,7 +129,16 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
                 bond_existence.append(ems.adj[t][t2])
                 aromatic_bond_order.append(ems.aromatic_conn[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
-                    pair_props[p].append(ems.pair_properties[prop][t][t2])
+                    if nmr_type_limit == True and prop == "nmr_types":
+                        nmr_type = ems.pair_properties[prop][t][t2]
+                        nmr_type_path = nmr_type.split("J")[0]
+                        nmr_type_pair = nmr_type.split("J")[1]
+                        if int(nmr_type_path) > 9:
+                            pair_props[p].append("9J" + nmr_type_pair)
+                        else:
+                            pair_props[p].append(nmr_type)
+                    else:
+                        pair_props[p].append(ems.pair_properties[prop][t][t2])
 
                 # for p, prop in enumerate(ems.pair_properties.keys()):
                 #     if prop == 'coupling' and coupling_list == 'all':

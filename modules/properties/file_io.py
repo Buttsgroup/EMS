@@ -5,11 +5,11 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
-from EMS.modules.properties.structure.structure_io import sdf_to_rdmol
-from EMS.modules.properties.structure.structure_io import xyz_to_rdmol
-from EMS.modules.properties.structure.structure_io import dataframe_to_rdmol
-from EMS.modules.properties.structure.structure_io import structure_to_rdmol_NoConn
-from EMS.modules.comp_chem.gaussian.gaussian_io import gaussian_read
+from EMS.modules.properties.structure.rdkit_structure_read import sdf_to_rdmol
+from EMS.modules.properties.structure.rdkit_structure_read import xyz_to_rdmol
+from EMS.modules.properties.structure.rdkit_structure_read import dataframe_to_rdmol
+from EMS.modules.properties.structure.rdkit_structure_read import structure_arrays_to_rdmol_NoConn
+from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
 
 ########### Set up the logger system ###########
@@ -164,8 +164,8 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
                 
                 # Get the atom types and coordinates from the Gaussian log file
                 try:
-                    atom_types, atom_coords = gaussian_read(file)
-                    rdmol = structure_to_rdmol_NoConn(atom_types, atom_coords)
+                    atom_types, atom_coords = gaussian_read_structure(file)
+                    rdmol = structure_arrays_to_rdmol_NoConn(atom_types, atom_coords)
                 except:
                     logger.error(f"Fail to read RDKit molecule from the Gaussian log file: {file}")
                     raise ValueError(f"Fail to read RDKit molecule from the Gaussian log file: {file}")
@@ -174,8 +174,7 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
                 rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
                 official_name = rdmol.GetProp("_Name")
 
-
-            # Raise an error if the .log file is not a supported type 
+            # Raise an error if the .log file is not a supported type
             else:
                 logger.error(f"Unable to determine the file type from the .log file: {file}")
                 raise ValueError(f"Unable to determine the file type from the .log file: {file}")
