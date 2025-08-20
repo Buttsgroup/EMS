@@ -1,11 +1,8 @@
 import numpy as np
 import copy
-from io import StringIO
 import logging
 import sys
 from datetime import date
-import random
-import string
 
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_structure_arrays
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_sdf_block
@@ -20,6 +17,7 @@ from EMS.modules.properties.nmr.nmr_read import nmr_read_gaussian
 from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
 from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_block
+from EMS.modules.conformer.EMSconf import EMSconf
 
 from rdkit import Chem
 from rdkit.Chem import rdmolops
@@ -470,6 +468,11 @@ class EMS(object):
         else:
             with open(outfile, "w") as f:
                 f.write(block)
+
+    
+    def get_conformers(self, params=None):
+
+        return EMSconf(self, params=params)
 
 
 
