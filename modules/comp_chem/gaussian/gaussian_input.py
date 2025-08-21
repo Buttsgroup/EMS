@@ -29,6 +29,7 @@ def check_prefs(prefs=None):
     - freq (bool): Whether to perform frequency calculations. Default is True.
     - functional (str): DFT functional. Default is 'mPW1PW'.
     - basis_set (str): Basis set for representing molecular orbitals. Default is '6-311g(d,p)'.
+    - mixed (bool): Whether to calculate both shielding tensors and J couplings in one job. Default is True.
     - solvent (str | None): Solvent for implicit solvent calculations. Default is None.
     - solvent_model (str | None): Solvent model. Default is None.
     - grid (str): Integration grid for DFT calculation. Default is 'ultrafine'.
@@ -49,6 +50,7 @@ def check_prefs(prefs=None):
     prefs.setdefault('freq', True)
     prefs.setdefault('functional', 'mPW1PW')
     prefs.setdefault('basis_set', '6-311g(d,p)')
+    prefs.setdefault('mixed', True)
     prefs.setdefault('solvent', None)
     prefs.setdefault('solvent_model', None)
     prefs.setdefault('grid', 'ultrafine')

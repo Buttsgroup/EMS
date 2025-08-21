@@ -218,6 +218,11 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
                 Chem.Kekulize(line_mol)
                 AllChem.EmbedMolecule(line_mol)              # obtain the initial 3D structure for a molecule
 
+                if AllChem.MMFFHasAllMoleculeParams(line_mol):
+                    AllChem.MMFFOptimizeMolecule(line_mol)
+                else:
+                    AllChem.UFFOptimizeMolecule(line_mol)
+
             except Exception as e:
                 logger.error(f"Fail to process the rdkit molecule object transformed from line notation string by RDKit: {file}")
                 raise e
