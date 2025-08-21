@@ -2,6 +2,9 @@ import sys
 import logging
 import random
 import string
+import numpy as np
+
+from rdkit import Chem
 
 from EMS.modules.conformer.conformer_generation.conformer_embedding import rdkit_conformer_embedding
 from EMS.modules.conformer.conformer_generation.rdkit_conformer_optimization import rdkit_conformer_optimization
@@ -65,6 +68,9 @@ class EMSconf:
         - conformer_embedding_method (str): The method used to embed the conformers. Only "rdkit" is currently supported.
         - conformer_optimization_method (str): The method used to optimize the conformers. "rdkit" and "xtb" are currently supported.
         - num_conformers (int): The number of conformers to embed.
+        - e_threshold (float): The energy threshold for two conformer having the same energy (kJ/mol).
+        - geom_threshold (float): The geometric threshold for two conformers having the same geometry (Angstrom).
+            The geometric threshold refers to the averaged distance among every atom pair.
         '''
 
         # Set default parameters for general conformer generation settings
@@ -72,6 +78,9 @@ class EMSconf:
         self.params.setdefault("conformer_embedding_method", "rdkit")
         self.params.setdefault("conformer_optimization_method", "rdkit")
         self.params.setdefault("num_conformers", 10)
+        self.params.setdefault("e_threshold", 0.5)
+        self.params.setdefault("geom_threshold", 0.2)
+        self.params.setdefault("boltzmann_temp", 300.0)
 
 
     def get_molname(self):
@@ -115,7 +124,7 @@ class EMSconf:
     
     def get_conformer_embeddings(self):
         '''
-        Generate conformer embeddings.
+        Generate conformer embeddings for the self.rdmol RDKit molecule.
         '''
 
         if self.params["conformer_embedding_method"] == "rdkit":
@@ -128,7 +137,7 @@ class EMSconf:
 
     def do_conformer_optimization(self):
         '''
-        Optimize the structures of the conformers.
+        Optimize the structures of the conformers and save the conformer energies to self.emol.mol_properties["conformer_energies"].
         '''
 
         # Embedding conformers before optimizing their structures
@@ -145,6 +154,101 @@ class EMSconf:
         else:
             logger.warning(f"The conformer optimization method is not recognized: {self.params['conformer_optimization_method']}. Change to RDKit.")
             self.emol.mol_properties["conformer_energies"] = rdkit_conformer_optimization(self.rdmol, self.params)
+
+
+    def redundant_elimination(self, conformer_optimization=True):
+        '''
+        Track the IDs of the conformers that have similar energies and geometries to other conformers.
+        The list of redundant conformer IDs will be saved to emol.mol_properties["redundant_conformers"].
+
+        Args:
+        - conformer_optimization (bool): Whether to perform conformer optimization before redundancy elimination.
+            If False, the redundant_elimination method will run without prior optimization.
+            But there should be "conformer_energies" available in self.emol.mol_properties and related conformers in self.rdmol.
+        '''
+
+        # Carry out conformer optimization to save the conformers' energy and structure information
+        if conformer_optimization:
+            self.do_conformer_optimization()
+
+        # Get the valid conformer IDs
+        conf_ids = list(self.emol.mol_properties["conformer_energies"].keys())
+
+        # Get the distance matrix for the conformers
+        conformer_distance_matrix = {}
+        for conf_id in conf_ids:
+            dist_matrix = Chem.Get3DDistanceMatrix(self.rdmol, confId=conf_id)
+            conformer_distance_matrix[conf_id] = dist_matrix
+
+        # Initialize the list to keep track of redundant conformers
+        redundant_conformers = []
+
+        # Iterate over conformer pairs and delete the one with similar energy and distance matrix
+        for i, conf_id_a in enumerate(conf_ids):
+            for j, conf_id_b in enumerate(conf_ids):
+                if i >= j:
+                    continue
+
+                # Skip if one of the conformer pair is already marked for elimination
+                if conf_id_a in redundant_conformers or conf_id_b in redundant_conformers:
+                    continue
+
+                # Get the energy and distance matrix for the conformer pair
+                energy_a = self.emol.mol_properties["conformer_energies"][conf_id_a]
+                energy_b = self.emol.mol_properties["conformer_energies"][conf_id_b]
+                dist_matrix_a = conformer_distance_matrix[conf_id_a]
+                dist_matrix_b = conformer_distance_matrix[conf_id_b]
+
+                # Get the energy and distance difference
+                pair_num = len(dist_matrix_a) * (len(dist_matrix_a) - 1) / 2
+                energy_diff = abs(energy_a - energy_b) * 4.184       # kcal/mol to kJ/mol
+                dist_diff = np.sum(np.abs(dist_matrix_a - dist_matrix_b)) / (2 * pair_num)
+
+                # If the energy and distance differences are below the thresholds, mark the conformer for elimination
+                if energy_diff < self.params["e_threshold"] and dist_diff < self.params["geom_threshold"]:
+                    redundant_conformers.append(conf_id_b)
+
+        # Save the list of redundant conformer IDs to emol.mol_properties["redundant_conformers"]
+        self.emol.mol_properties["redundant_conformers"] = redundant_conformers
+
+
+    def calc_population(self, eliminate_redundant=True):
+        """
+        Calculate the population distribution of the conformers at a given temperature and save the population to self.emol.mol_properties["conformer_population"].
+
+        Args:
+        - temp (float): The temperature in Kelvin.
+        - eliminate_redundant (bool): Whether to eliminate redundant conformers before calculation.
+            If False, the calc_population method will run without prior redundant elimination.
+            But there should be "conformer_energies" and "redundant_conformers" available in self.emol.mol_properties and related conformers in self.rdmol.
+        """
+
+        if eliminate_redundant:
+            self.redundant_elimination()
+
+        # Get the valid conformer IDs
+        valid_energy_dict = {}
+        for key, value in self.emol.mol_properties["conformer_energies"].items():
+            if key in self.emol.mol_properties["redundant_conformers"]:
+                continue
+            valid_energy_dict[key] = value
+
+        # Get the conformer ID array and the energy array
+        valid_conf_ids = list(valid_energy_dict.keys())
+        valid_energies = np.array([valid_energy_dict[key] for key in valid_conf_ids])
+
+        # Get the population of conformers by Boltzmann distribution
+        KJ_energies = valid_energies * 4.184       # kcal/mol to kJ/mol
+        min_energy = np.min(KJ_energies)
+        relative_energies = KJ_energies - min_energy
+        exp_energies = np.exp(- relative_energies * 1000 / (8.314 * self.params["boltzmann_temp"]))
+        sum_exp_energies = np.sum(exp_energies)
+        populations = exp_energies / sum_exp_energies
+
+        # Save the conformer population to self.emol.mol_properties["conformer_population"]
+        self.emol.mol_properties["conformer_population"] = {}
+        for i, conf_id in enumerate(valid_conf_ids):
+            self.emol.mol_properties["conformer_population"][conf_id] = populations[i].item()
 
 
 
