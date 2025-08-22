@@ -1,15 +1,10 @@
 import numpy as np
 import logging
 import sys
-import os
-from copy import deepcopy
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
 from rdkit.Chem.rdDetermineBonds import DetermineBonds
 from rdkit.Chem.rdchem import BondType
-
-from EMS.utils.periodic_table import Get_periodic_table
 
 
 ########### Set up the logger system ###########
@@ -22,101 +17,7 @@ logger.setLevel(logging.INFO)
 ########### Set up the logger system ###########
 
 
-def structure_from_rdmol(mol, kekulize=True):
-    '''
-    This function is used to extract the structure information: atom type, atom coordinates, and bond orders between atoms as arrays from an RDKit molecule object.
-    
-    Args:
-    - rdmol: The RDKit molecule object to extract the structure information.
-    - kekulize (bool): Whether to kekulize the molecule before extracting the structure information.
-        This argument is to prevent an aromatic molecule having a bond order of 1.5, which is not an integer and may cause some problems in assigning bond orders.
-
-    Returns:
-    - type_array (np.ndarray): The array of atom types, which is the atomic number of each atom. The shape is (num_atoms,).
-    - xyz_array (np.ndarray): The array of atom coordinates. The shape is (num_atoms, 3).
-    - conn_array (np.ndarray): The array of bond orders between atoms. The shape is (num_atoms, num_atoms).
-    '''
-
-    rdmol = deepcopy(mol)
-
-    # Kekulize the molecule
-    if kekulize:
-        try:
-            Chem.Kekulize(rdmol)
-        except Exception as e:
-            logger.error(f"Fail to kekulize the molecule.")
-            raise e
-    
-    # Initialze the arrays to store the structure information: atom type, atom coordinates, and bond orders between atoms
-    type_array = np.zeros(rdmol.GetNumAtoms(), dtype=np.int32)
-    xyz_array = np.zeros((rdmol.GetNumAtoms(), 3), dtype=np.float64)
-    conn_array = np.zeros((rdmol.GetNumAtoms(), rdmol.GetNumAtoms()), dtype=np.int32)
-    
-    # Loop over the atoms in the molecule
-    for i, atoms in enumerate(rdmol.GetAtoms()):
-
-        # Get the atomic number of the atom
-        type_array[i] = atoms.GetAtomicNum()
-
-        # Generate conformers for the molecule if there is no conformer and get the atom coordinates from the conformer
-        if rdmol.GetNumConformers() < 1:
-            AllChem.Compute2DCoords(rdmol)
-        xyz_array[i][0] = rdmol.GetConformer(0).GetAtomPosition(i).x
-        xyz_array[i][1] = rdmol.GetConformer(0).GetAtomPosition(i).y
-        xyz_array[i][2] = rdmol.GetConformer(0).GetAtomPosition(i).z
-
-        # Get the bond orders between atoms
-        for j, atoms in enumerate(rdmol.GetAtoms()):
-            if i == j:
-                continue
-
-            bond = rdmol.GetBondBetweenAtoms(i, j)
-            if bond is not None:
-                conn_array[i][j] = int(bond.GetBondTypeAsDouble())
-                conn_array[j][i] = int(bond.GetBondTypeAsDouble())
-
-    return type_array, xyz_array, conn_array
-
-
-def aromatic_bond_from_rdmol(mol):
-    '''
-    This function is used to extract the structure information: bond orders between atoms as arrays from an RDKit molecule object.
-    The aromatic bonds are included in the bond orders, and the bond order of an aromatic bond is 1.5.
-    
-    Args:
-    - rdmol: The RDKit molecule object to extract the structure information.
-   
-    Returns:
-    - aromatic_conn_array (np.ndarray): The array of bond orders between atoms. The shape is (num_atoms, num_atoms).
-    '''
-
-    rdmol = deepcopy(mol)
-
-    try:
-        Chem.SetAromaticity(rdmol)
-    except Exception as e:
-        logger.error(f"Fail to assign aromatic bonds to the molecule.")
-        raise e
-
-    aromatic_conn_array = np.zeros((rdmol.GetNumAtoms(), rdmol.GetNumAtoms()), dtype=np.float64)
-
-    # Loop over the atoms in the molecule
-    for i, atoms in enumerate(rdmol.GetAtoms()):
-        # Get the bond orders (including aromatic bonds) between atoms
-        for j, atoms in enumerate(rdmol.GetAtoms()):
-            if i == j:
-                continue
-
-            bond = rdmol.GetBondBetweenAtoms(i, j)
-            
-            if bond is not None:
-                aromatic_conn_array[i][j] = bond.GetBondTypeAsDouble()
-                aromatic_conn_array[j][i] = bond.GetBondTypeAsDouble()
-    
-    return aromatic_conn_array
-    
-
-def structure_to_rdmol_NoConn(type_array, xyz_array):
+def structure_arrays_to_rdmol_NoConn(type_array, xyz_array):
     '''
     This function is used to convert the structure information: atom types and atom coordinates, to an RDKit molecule object.
     The bond orders between atoms are not included in the structure information, so they will be determined by the RDKit function DetermineBonds.
@@ -315,7 +216,7 @@ def xyz_to_rdmol(file_path):
     '''
     This function is used to convert a xyz file to an RDKit molecule object by reading the xyz file line by line and adding atoms and bonds to the molecule.
     The purpose of writing this function is to avoid the use of RDKit's xyz file reader, which is not stable when reading xyz files.
-    Openbabel.pybel is able to read xyz files in a stable way, but the installation of openbabel is not always successful, so we want to avoid using openbabel in EMS package.
+    Openbabel.pybel is able to read xyz files in a stable way, but the installation of openbabel is not stable, so we want to avoid using openbabel in EMS package.
 
     Args:
     - file_path (str): The path to the xyz file.
@@ -445,53 +346,6 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
     return rdmol
 
 
-def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, SDFversion="V3000"):
-    '''
-    This function is used to write an RDKit molecule object to an sdf block with specified molecule properties and SDF version.
-    Here are some explanations and experiences for writing this function:
-    (1) In this function, I use Chem.SDWriter to write the sdf block, because this is the only way (as far as I know) to automatically write the molecule properties.
-        Other functions like Chem.MolToMolBlock and Chem.MolToMolFile only write the molecule structure without the properties, even if you add the properties to RDKit molecule object.
-    (2) For the _Name, _MolFileInfo, and _MolFileComments properties, only _Name will be automatically written to the sdf block by Chem.SDWriter, but if you want to write
-        _MolFileInfo and _MolFileComments, you need to manually change the second and third lines in the sdf block.
-    (3) Some useful functions in RDKit when writing the sdf block:
-        - Mol.GetPropsAsDict(): Get all the properties of the molecule as a dictionary, but not including hidden and computed properties.
-        - Mol.ClearProp(prop): Clear an assigned property of the molecule. However, there seems no function to clear all the properties at once.
-        - Mol.SetProp(name, value): Set a property for the molecule.
-        - Mol.GetPropNames(includePrivate=True, includeComputed=True): Get all the property names of the molecule, including hidden and computed properties.
-
-    Args:
-    - rdmol: The RDKit molecule object to be written to the sdf block.
-    - MolName (str): The name of the molecule, referring to the _Name property of the RDKit molecule object and the first line in the sdf file.
-    - FileInfo (str): The file information of the molecule, referring to the _MolFileInfo property of the RDKit molecule object and the second line in the sdf file.
-    - FileComment (str): The file comment of the molecule, referring to the _MolFileComments property of the RDKit molecule object and the third line in the sdf file.
-    - tmp_file (str): The path of the temporary sdf file to store the sdf block.
-    - SDFversion (str): The version of the sdf file, which can be "V3000" or "V2000".
-    '''
-
-    # Set the _Name properties for the RDKit molecule objec, which refer to the first three lines in the sdf file
-    rdmol.SetProp("_Name", MolName)
-
-    # Write the molecule to the sdf block with the specified SDF version
-    with Chem.SDWriter(tmp_file) as writer:
-        if SDFversion == "V3000":
-            writer.SetForceV3000(True)
-        elif SDFversion == "V2000":
-            writer.SetForceV3000(False)
-        else:
-            logger.error(f"Invalid SDF version: {SDFversion}")
-            raise ValueError(f"Invalid SDF version: {SDFversion}")
-        writer.write(rdmol)
-    
-    # Read the sdf block from the temporary sdf file and set the _MolFileInfo and _MolFileComments properties
-    with open(tmp_file, 'r') as f:
-        lines = f.readlines()
-        lines[1] = FileInfo + '\n'
-        lines[2] = FileComment + '\n'
-    os.remove(tmp_file)
-    
-    # Return the sdf block
-    return ''.join(lines)
-    
 
 
 
@@ -499,7 +353,11 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, SDFversi
 
 
 
-     
+
+
+
+
+
 
 
 ################## The following functions are temporarily abandoned ##################
@@ -572,3 +430,55 @@ def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, SDFversi
 #     obmol.write('sdf', tmp_file, overwrite=True)
 #     rdmol = sdf_to_rdmol(tmp_file, filename, streamlit=False)
 #     os.remove(tmp_file)
+
+
+
+
+
+
+# def rdmol_to_sdf_block(rdmol, MolName, FileInfo, FileComment, tmp_file, SDFversion="V3000"):
+#     '''
+#     This function is used to write an RDKit molecule object to an sdf block with specified molecule properties and SDF version.
+#     Here are some explanations and experiences for writing this function:
+#     (1) In this function, I use Chem.SDWriter to write the sdf block, because this is the only way (as far as I know) to automatically write the molecule properties.
+#         Other functions like Chem.MolToMolBlock and Chem.MolToMolFile only write the molecule structure without the properties, even if you add the properties to RDKit molecule object.
+#     (2) For the _Name, _MolFileInfo, and _MolFileComments properties, only _Name will be automatically written to the sdf block by Chem.SDWriter, but if you want to write
+#         _MolFileInfo and _MolFileComments, you need to manually change the second and third lines in the sdf block.
+#     (3) Some useful functions in RDKit when writing the sdf block:
+#         - Mol.GetPropsAsDict(): Get all the properties of the molecule as a dictionary, but not including hidden and computed properties.
+#         - Mol.ClearProp(prop): Clear an assigned property of the molecule. However, there seems no function to clear all the properties at once.
+#         - Mol.SetProp(name, value): Set a property for the molecule.
+#         - Mol.GetPropNames(includePrivate=True, includeComputed=True): Get all the property names of the molecule, including hidden and computed properties.
+
+#     Args:
+#     - rdmol: The RDKit molecule object to be written to the sdf block.
+#     - MolName (str): The name of the molecule, referring to the _Name property of the RDKit molecule object and the first line in the sdf file.
+#     - FileInfo (str): The file information of the molecule, referring to the _MolFileInfo property of the RDKit molecule object and the second line in the sdf file.
+#     - FileComment (str): The file comment of the molecule, referring to the _MolFileComments property of the RDKit molecule object and the third line in the sdf file.
+#     - tmp_file (str): The path of the temporary sdf file to store the sdf block.
+#     - SDFversion (str): The version of the sdf file, which can be "V3000" or "V2000".
+#     '''
+
+#     # Set the _Name properties for the RDKit molecule objec, which refer to the first three lines in the sdf file
+#     rdmol.SetProp("_Name", MolName)
+
+#     # Write the molecule to the sdf block with the specified SDF version
+#     with Chem.SDWriter(tmp_file) as writer:
+#         if SDFversion == "V3000":
+#             writer.SetForceV3000(True)
+#         elif SDFversion == "V2000":
+#             writer.SetForceV3000(False)
+#         else:
+#             logger.error(f"Invalid SDF version: {SDFversion}")
+#             raise ValueError(f"Invalid SDF version: {SDFversion}")
+#         writer.write(rdmol)
+    
+#     # Read the sdf block from the temporary sdf file and set the _MolFileInfo and _MolFileComments properties
+#     with open(tmp_file, 'r') as f:
+#         lines = f.readlines()
+#         lines[1] = FileInfo + '\n'
+#         lines[2] = FileComment + '\n'
+#     os.remove(tmp_file)
+    
+#     # Return the sdf block
+#     return ''.join(lines)

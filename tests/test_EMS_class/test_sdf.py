@@ -47,7 +47,7 @@ def test_sdf_no_nmr():
     assert emol.pair_properties == {}
 
     # Test on an SDF file when outputting to an SDF file 
-    sdf_block = emol.to_sdf(outfile='', FileComments='Testing_sdf_molecule', prop_to_write=None)
+    sdf_block = emol.to_file('sdf', outfile='', FileComments='Testing_sdf_molecule')
     sdf_block_list = sdf_block.split('\n')
     assert type(sdf_block) == str
     assert sdf_block_list[0] == 'imp_dsgdb9nsd_074000'
@@ -109,7 +109,7 @@ def test_sdf_nmr():
     assert emol.pair_properties['nmr_types'].dtype == '<U4'
 
     # Test on an SDF file when outputting to an SDF file (1)
-    emol.to_sdf(outfile='tmp_testmol_sdf_nmr.sdf', FileComments='Testing_sdf_molecule_nmr', prop_cover=True, prop_to_write='nmr')
+    emol.to_file('sdf', outfile='tmp_testmol_sdf_nmr.sdf')
     emol2 = ems.EMS(file='tmp_testmol_sdf_nmr.sdf', mol_id='testmol_sdf_nmr_2', nmr=True)
 
     assert emol2.rdmol.GetProp('_Name') == 'imp_dsgdb9nsd_074000'

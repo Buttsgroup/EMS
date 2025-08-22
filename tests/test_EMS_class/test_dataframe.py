@@ -91,7 +91,7 @@ def test_dataframe_nmr():
     assert emol.pair_properties['nmr_types_df'].dtype == '<U11'
 
     # Test on atom and pair dataframes when outputting to an SDF file
-    emol.to_sdf(outfile='tmp_testmol_dataframe_nmr.sdf', FileComments='Testing_dataframe_molecule_nmr', prop_cover=True, prop_to_write='nmr')
+    emol.to_file('sdf', outfile='tmp_testmol_dataframe_nmr.sdf', FileComments='Testing_dataframe_molecule_nmr')
     emol2 = ems.EMS(file='tmp_testmol_dataframe_nmr.sdf', nmr=True)
 
     assert emol2.rdmol.GetProp('_Name') == 'imp_dsgdb9nsd_122801.nmredata.sdf'

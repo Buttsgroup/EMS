@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 ########### Set up the logger system ###########
 
 
-def gaussian_read(file):
+def gaussian_read_structure(file):
     '''
     This function reads the Gaussian log file and extracts the types and coordinates of the atoms in the molecule.
 
@@ -21,7 +21,6 @@ def gaussian_read(file):
     '''
 
     # !!! The following section reads the number of atoms in the molecule from the Gaussian log file
-
     # The atom number information is located in the line that contains 'NAtoms='
     atomnumber = None
     with open(file, 'r') as f:
@@ -45,15 +44,9 @@ def gaussian_read(file):
     
 
     # !!! The following section reads the atom types and atom coordinates together from the Gaussian log file
-
-    # Initialize empty arrays for atom types, atom coordinates, chemical shielding tensors and coupling constants
-    atom_types = np.zeros(atomnumber, dtype=np.int32)
-    atom_coords = np.zeros((atomnumber, 3), dtype=np.float64)
-
     # Initialize switches for reading atom types and atom coordinates
     # The atom_switch is activated when the atom types and atom coordinates are found, which are located between 'Standard orientation:' and 'Rotational constants (GHZ)' lines
     atom_switch = False
-
 
     # Go through file to find atom types and atom coordinates
     with open(file, 'r') as f_handle:
@@ -62,7 +55,11 @@ def gaussian_read(file):
             # Control the switch for reading the atom types and atom coordinates
             if "Standard orientation:" in line:
                 atom_switch = True
+                # Initialize empty arrays for atom types, atom coordinates, chemical shielding tensors and coupling constants every time when reading the structure block
+                atom_types = np.zeros(atomnumber, dtype=np.int32)
+                atom_coords = np.zeros((atomnumber, 3), dtype=np.float64)
                 continue
+
             if "Rotational constants (GHZ)" in line:
                 atom_switch = False
                 continue
@@ -123,17 +120,11 @@ def gaussian_read_nmr(file):
     
 
     # !!! The following section reads the atom types, atom coordinates, chemical shielding tensors and coupling constants together from the log file
-
-    # Initialize empty arrays for chemical shielding tensors and coupling constants
-    shift_array = np.zeros(atomnumber, dtype=np.float64)
-    couplings = np.zeros((atomnumber, atomnumber), dtype=np.float64)
-
     # Initialize switches for reading chemical shielding tensors and coupling constants
     # The shift_switch is activated when the chemical shielding tensors are found, which are located between 'SCF GIAO Magnetic shielding tensor (ppm)' and 'Fermi Contact' lines
     # The coupling_switch is activated when the coupling constants are found, which are located between 'Total nuclear spin-spin coupling J (Hz):' and 'End of Minotr' lines
     shift_switch = False
     coupling_switch = False
-
 
     # Go through file to find magnetic shielding tensors
     with open(file, 'r') as f_handle:
@@ -142,7 +133,10 @@ def gaussian_read_nmr(file):
             # Control the switch for reading the chemical shielding tensors
             if "SCF GIAO Magnetic shielding tensor (ppm)" in line:
                 shift_switch = True
+                # Initialze empty arrays for chemical shielding tensors every time when reading the shielding tensor block
+                shift_array = np.zeros(atomnumber, dtype=np.float64)
                 continue
+
             if "Fermi Contact" in line:
                 shift_switch= False
                 continue
@@ -150,7 +144,10 @@ def gaussian_read_nmr(file):
             # Control the switch for reading the coupling constants
             if "Total nuclear spin-spin coupling J (Hz):" in line:
                 coupling_switch = True
+                # Initialize empty arrays for chemical shielding tensors and coupling constants
+                couplings = np.zeros((atomnumber, atomnumber), dtype=np.float64)
                 continue
+
             if "End of Minotr" in line:
                 coupling_switch = False
                 continue
