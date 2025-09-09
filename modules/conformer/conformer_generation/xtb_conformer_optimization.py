@@ -239,6 +239,7 @@ def xtb_conformer_optimization(rdmol, params):
                 conformer.SetAtomPosition(i, Point3D(float(x), float(y), float(z)))
 
     # Delete the xTB working directory
-    shutil.rmtree(xtb_folder, ignore_errors=True)
+    if params["clean_files"] == True:
+        shutil.rmtree(xtb_folder, ignore_errors=True)
 
     return energy_dict

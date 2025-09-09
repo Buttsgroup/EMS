@@ -73,6 +73,7 @@ class EMSconf:
         - geom_threshold (float): The geometric threshold for two conformers having the same geometry (Angstrom).
             The geometric threshold refers to the averaged distance among every atom pair.
         - boltzmann_temp (float): The temperature for calculating the Boltzmann distribution of the conformers (K).
+        - clean_files (bool): Whether to clean up the calculation files generated during conformer generation.
         '''
 
         # Set default parameters for general conformer generation settings
@@ -83,6 +84,7 @@ class EMSconf:
         self.params.setdefault("e_threshold", 0.5)
         self.params.setdefault("geom_threshold", 0.2)
         self.params.setdefault("boltzmann_temp", 300.0)
+        self.params.setdefault("clean_files", True)
 
 
     def get_molname(self):

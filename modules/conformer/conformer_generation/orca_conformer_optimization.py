@@ -175,7 +175,8 @@ def orca_conformer_optimization(rdmol, params):
                 conformer.SetAtomPosition(i, Point3D(float(x), float(y), float(z)))
         
         # Delete the running folder
-        shutil.rmtree(orca_folder, ignore_errors=True)
+        if params["clean_files"] == True:
+            shutil.rmtree(orca_folder, ignore_errors=True)
     
     return energy_dict
 
