@@ -1,0 +1,3 @@
+%scf
+   convergence tight
+end

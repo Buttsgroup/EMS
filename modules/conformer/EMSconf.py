@@ -9,6 +9,7 @@ from rdkit import Chem
 from EMS.modules.conformer.conformer_generation.conformer_embedding import rdkit_conformer_embedding
 from EMS.modules.conformer.conformer_generation.rdkit_conformer_optimization import rdkit_conformer_optimization
 from EMS.modules.conformer.conformer_generation.xtb_conformer_optimization import xtb_conformer_optimization
+from EMS.modules.conformer.conformer_generation.orca_conformer_optimization import orca_conformer_optimization
 
 
 ########### Set up the logger system ###########
@@ -71,6 +72,7 @@ class EMSconf:
         - e_threshold (float): The energy threshold for two conformer having the same energy (kJ/mol).
         - geom_threshold (float): The geometric threshold for two conformers having the same geometry (Angstrom).
             The geometric threshold refers to the averaged distance among every atom pair.
+        - boltzmann_temp (float): The temperature for calculating the Boltzmann distribution of the conformers (K).
         '''
 
         # Set default parameters for general conformer generation settings
@@ -150,6 +152,9 @@ class EMSconf:
 
         elif self.params["conformer_optimization_method"] == "xtb":
             self.emol.mol_properties["conformer_energies"] = xtb_conformer_optimization(self.rdmol, self.params)
+
+        elif self.params["conformer_optimization_method"] == "orca":
+            self.emol.mol_properties["conformer_energies"] = orca_conformer_optimization(self.rdmol, self.params)
         
         else:
             logger.warning(f"The conformer optimization method is not recognized: {self.params['conformer_optimization_method']}. Change to RDKit.")
