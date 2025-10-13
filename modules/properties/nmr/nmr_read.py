@@ -376,7 +376,7 @@ def nmr_read_cif(file):
             # ShiftML format
             if shift_method == 'shiftml':
                 line_split = line.strip().split()
-                line_split = [item for item in line_split if item != '[' and item != ']']
+                line_split = [item.replace('[','').replace(']','') for item in line_split if item != '[' and item != ']']
                 shift_list.extend(line_split)
                 # Stop reading when reaching the end of the block
                 if ']' in line:
