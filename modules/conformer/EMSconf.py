@@ -73,6 +73,12 @@ class EMSconf:
         - geom_threshold (float): The geometric threshold for two conformers having the same geometry (Angstrom).
             The geometric threshold refers to the averaged distance among every atom pair.
         - boltzmann_temp (float): The temperature for calculating the Boltzmann distribution of the conformers (K).
+        - orca_auto (bool): Whether to automatically set the parameters for ORCA conformer optimization.
+            If True, users only need to provide the values of a few parameters listed in /EMS/modules/conformer/conformer_generation/orca_conformer_optimization.py
+            and the ORCA input file will be automatically generated.
+            If False, users need to provide the full rootline and control block to write ORCA input file.
+            The full parameters can be found in ORCA 6.1 documentation: https://www.faccts.de/docs/orca/6.1/manual/index.html.
+            An example control block file is available in EMS/modules/comp_chem/orca/control_block_demo.inc
         - clean_files (bool): Whether to clean up the calculation files generated during conformer generation.
         '''
 
@@ -84,6 +90,7 @@ class EMSconf:
         self.params.setdefault("e_threshold", 0.5)
         self.params.setdefault("geom_threshold", 0.2)
         self.params.setdefault("boltzmann_temp", 300.0)
+        self.params.setdefault("orca_auto", True)
         self.params.setdefault("clean_files", True)
 
 

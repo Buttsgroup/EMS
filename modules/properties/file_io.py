@@ -1,14 +1,23 @@
 import logging
 import sys
 import pandas as pd
+import numpy as np
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
 from EMS.modules.properties.structure.rdkit_structure_read import sdf_to_rdmol
 from EMS.modules.properties.structure.rdkit_structure_read import xyz_to_rdmol
+from EMS.modules.properties.structure.rdkit_structure_read import mol2_to_rdmol
 from EMS.modules.properties.structure.rdkit_structure_read import dataframe_to_rdmol
+from EMS.modules.properties.structure.rdkit_structure_read import cif_to_rdmol
 from EMS.modules.properties.structure.rdkit_structure_read import structure_arrays_to_rdmol_NoConn
+from EMS.modules.properties.nmr.nmr_read import nmr_read_sdf
+from EMS.modules.properties.nmr.nmr_read import nmr_read_rdmol
+from EMS.modules.properties.nmr.nmr_read import nmr_read_df
+from EMS.modules.properties.nmr.nmr_read import nmr_read_gaussian
+from EMS.modules.properties.nmr.nmr_read import nmr_read_cif
+from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
 
@@ -109,6 +118,13 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
     (6) atom and pair dataframes (tuple)
         - The tuple should contain two pandas dataframes: the atom dataframe and the pair dataframe.
         - Both the name for the RDKit molecule and the official name for the EMS molecule will be assigned using the molecule name in the atom dataframe.
+    (7) .mol2 file (str)
+        - The name for the RDKit molecule is assigned in the order of _Name, mol_id.
+        - The .mol2 file usually includes a name in the first line of the @<TRIPOS>MOLECULE section.
+        - The official name for the EMS molecule will be obtained from the '_Name' property of the name-assigned RDKit molecule object.
+    (8) .cif file (str)
+        - The .cif files usually don't include a name for the molecule, so it is recommended to set a name for the molecule using the 'mol_id' argument.
+        - All of the id and official name for the EMS molecule and the name in the RDKit molecule object will be usually the same.
     '''
 
     file_type = None
@@ -149,6 +165,40 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
             
             # Assign a name to the RDKit molecule object and get the official name from the _Name property
             # Because the .xyz files usually don't include a name for the molecule, the id and official name for the EMS molecule and the name in the RDKit molecule object will be the same.
+            rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
+            official_name = rdmol.GetProp("_Name")
+
+        
+        # Check if the file is a mol2 file
+        elif file.endswith('.mol2'):
+            file_type = 'mol2'
+
+            # Get the RDKit molecule object from the mol2 file
+            try:
+                rdmol = mol2_to_rdmol(file)
+            except:
+                logger.error(f"Fail to read RDKit molecule from the mol2 file: {file}")
+                raise ValueError(f"Fail to read RDKit molecule from the mol2 file: {file}")
+            
+            # Assign a name to the RDKit molecule object in the order of _Name, mol_id
+            # The official name is obtained from the _Name property of the name-assigned RDKit molecule object
+            rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
+            official_name = rdmol.GetProp("_Name")
+
+        
+        # Check if the file is a .cif file
+        elif file.endswith('.cif'):
+            file_type = 'cif'
+
+            # Get the RDKit molecule object from the cif file
+            try:
+                rdmol = cif_to_rdmol(file)
+            except:
+                logger.error(f"Fail to read RDKit molecule from the cif file: {file}")
+                raise ValueError(f"Fail to read RDKit molecule from the cif file: {file}")
+            
+            # Assign a name to the RDKit molecule object and get the official name from the _Name property
+            # Because the .cif files usually don't include a name for the molecule, the id and official name for the EMS molecule and the name in the RDKit molecule object will be the same.
             rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
             official_name = rdmol.GetProp("_Name")
 
@@ -277,21 +327,99 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
     # Return the file type, official name and RDKit molecule object
     return file_type, official_name, rdmol
 
-        
-        
-        
 
+def nmr_to_rdmol(rdmol):
+    '''
+    This function reads NMR data from various file formats and assigns the NMR data to the atom and pair properties of the EMS molecule (rdmol).
+
+    It supports reading NMR data from the following file formats:
+    (1) atom and pair dataframes (tuple)
+    (2) RDKit molecule object (rdkit.Chem.rdchem.Mol)
+    (3) .sdf file (str)
+    (4) Gaussian .log file (str)
+        For Gaussian .log files, this function saves the shielding tensors in the "raw_shift" attribute of atom properties, and then scales the shielding tensors to chemical shifts and saves them in the "shift" attribute.
+    (5) .cif file (str)
+    '''
+            
+    # Read NMR data if rdmol.file is atom and pair dataframes
+    # The difference between pair_properties["nmr_types"] and pair_properties["nmr_types_df"] is:
+    # (1) pair_properties["nmr_types"] is the matrix of coupling types between every two atoms, so distant atoms are also included, like '11JCH'
+    # (2) pair_properties["nmr_types_df"] is the matrix of coupling types only based on the atom pairs in the pair dataframe. 
+    #     If the dataframe is a 6-path one, atom pairs with 7 or more bonds are not included, like '7JCH'. The not-included atom pairs are set to a '0' string.
+    if rdmol.filetype == "dataframe":
+        try:
+            atom_df = rdmol.file[0]
+            pair_df = rdmol.file[1]
+            shift, shift_var, coupling_array, coupling_vars, coupling_types = nmr_read_df(atom_df, pair_df, rdmol.filename)
+
+            rdmol.pair_properties["nmr_types_df"] = coupling_types
+
+            # Check if the non-zero elements of pair_properties["nmr_types_df"] also exists in pair_properties["nmr_types"]
+            nmr_type_mask = rdmol.pair_properties["nmr_types_df"] != '0'
+            nmr_types_match = rdmol.pair_properties["nmr_types_df"] == rdmol.pair_properties["nmr_types"]
+
+            if not (nmr_types_match == nmr_type_mask).all():
+                logger.warning(f"Some coupling types in pair_properties['nmr_types_df'] do not match with pair_properties['nmr_types'] for molecule {rdmol.id}")
+
+        except Exception as e:
+            logger.error(f'Fail to read NMR data for molecule {rdmol.id} from dataframe')
+            raise e
     
-
-                
-
+    # Read NMR data if rdmol.file is an RDKit molecule object
+    elif rdmol.filetype == "rdmol":
+        try:
+            shift, shift_var, coupling_array, coupling_vars = nmr_read_rdmol(rdmol.rdmol, rdmol.id)
+        except Exception as e:
+            logger.error(f'Fail to read NMR data for molecule {rdmol.id} from rdkit molecule object')
+            raise e
+    
+    # Read NMR data if rdmol.file is an SDF file
+    elif rdmol.filetype == 'sdf':
+        try:
+            shift, shift_var, coupling_array, coupling_vars = nmr_read_sdf(rdmol.file, rdmol.streamlit)
+        except Exception as e:
+            logger.error(f'Fail to read NMR data for molecule {rdmol.id} from SDF file {rdmol.file}')
+            raise e
+    
+    # Read NMR data if rdmol.file is a Gaussian .log file
+    elif rdmol.filetype == 'gaussian-log':
+        try:
+            shift, coupling_array = nmr_read_gaussian(rdmol.file)
+            shift_var = np.zeros_like(shift)
+            coupling_vars = np.zeros_like(coupling_array)
+        except Exception as e:
+            logger.error(f'Fail to read NMR data for molecule {rdmol.id} from Gaussian .log file {rdmol.file}')
+            raise e
         
+    # Read NMR data if rdmol.file is a .cif file
+    elif rdmol.filetype == 'cif':
+        try:
+            shift, shift_var, coupling_array, coupling_vars = nmr_read_cif(rdmol.file)
+        except Exception as e:
+            logger.error(f'Fail to read NMR data for molecule {rdmol.id} from .cif file {rdmol.file}')
+            raise e
 
-                
+    # Raise error if the file type is not among the above
+    else:
+        logger.error(f'File {rdmol.id} with file type {rdmol.filetype} is not supported for reading NMR data')
+        raise ValueError(f'File {rdmol.id} with file type {rdmol.filetype} is not supported for reading NMR data')
 
 
+    # If file type is 'gaussian-log', save the unscaled shift values in the "raw_shift" attribute of atom properties
+    # Then save the scaled shift values in the "shift" attribute
+    # The coupling values generally don't need to be scaled, so save them in the "coupling" attribute
+    if rdmol.filetype == 'gaussian-log':
+        rdmol.atom_properties["raw_shift"] = shift
+        rdmol.atom_properties["shift_var"] = shift_var
+        rdmol.pair_properties["coupling"] = coupling_array
+        rdmol.pair_properties["coupling_var"] = coupling_vars
 
-        
+        rdmol.atom_properties["shift"] = scale_chemical_shifts(shift, rdmol.type)
 
-
+    # Assign the NMR data to the atom and pair properties for other file types
+    else:
+        rdmol.atom_properties["shift"] = shift
+        rdmol.atom_properties["shift_var"] = shift_var
+        rdmol.pair_properties["coupling"] = coupling_array
+        rdmol.pair_properties["coupling_var"] = coupling_vars
 

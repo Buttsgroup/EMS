@@ -10,6 +10,7 @@ from rdkit import Chem
 
 from EMS.modules.comp_chem.orca.orca_input import write_orca_inp_block
 from EMS.modules.comp_chem.orca.orca_read import orca_read_energy, orca_read_geometry
+from EMS.modules.comp_chem.orca.orca_input import default_orca_parameters
 
 
 ########### Set up the logger system ###########
@@ -46,11 +47,27 @@ def check_orca_conformer_optimization_params(params):
     - orca_CO_controlblock (str | None): The control block for the ORCA input file. If None, no control block will be used.
         The control block can be either a file path or a string block.
         An example control block file is available in EMS/modules/comp_chem/orca/control_block_demo.inc
+    - orca_CO_scf_convergence (str | None): The SCF convergence criteria, controlling the accuracy of each electronic structure step. 
+        Default is None, related to the default 'TIGHTSCF' in ORCA.
+    - orca_CO_opt (str): The optimization criteria, controlling the accuracy of the geometry optimization. Default is 'OPT'.
+    - orca_CO_freq (bool): Whether to perform frequency calculation after optimization. Default is False.
+    - orca_CO_functional (str): The DFT functional. Default is 'mPW1PW'.
+    - orca_CO_basis_set (str): The basis set. Default is '6-311g(d,p)'.
+    - orca_CO_solvent (str | None): The solvent for the calculation. Default is None.
+    - orca_CO_solvent_model (str | None): The solvent model for the calculation. Default is None.
+        The choices can be 'CPCM', 'SMD', 'COSMORS' or None.
+    - orca_CO_dispersion_correction (bool): Whether to include dispersion correction. Default is True.
+        The choices can be 'D2', 'D4', 'D3ZERO', 'D3BJ' or None.
     '''
 
+    # The following two parameters are for manually setting the ORCA input file.
     params.setdefault('orca_CO_rootline', 'BLYP def2-SVP Opt')
     params.setdefault('orca_CO_controlblock', None)
-    
+
+    # The following parameters are for automatically setting the ORCA input file.
+    for key, value in default_orca_parameters().items():
+        params.setdefault(f"orca_CO_{key}", value)
+
 
 def orca_conformer_optimization(rdmol, params):
     '''
