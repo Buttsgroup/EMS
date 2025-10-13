@@ -9,13 +9,9 @@ from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_sdf_
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_aromatic_bond_array
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_xyz_block
 from EMS.modules.properties.file_io import file_to_rdmol
+from EMS.modules.properties.file_io import nmr_to_rdmol
 from EMS.utils.periodic_table import Get_periodic_table
-from EMS.modules.properties.nmr.nmr_read import nmr_read_sdf
-from EMS.modules.properties.nmr.nmr_read import nmr_read_rdmol
-from EMS.modules.properties.nmr.nmr_read import nmr_read_df
-from EMS.modules.properties.nmr.nmr_read import nmr_read_gaussian
 from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
-from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_block
 from EMS.modules.conformer.EMSconf import EMSconf
 
@@ -177,83 +173,8 @@ class EMS(object):
             # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
             self.get_coupling_types()       
 
-            # Read NMR data if self.file is atom and pair dataframes
-            # The difference between pair_properties["nmr_types"] and pair_properties["nmr_types_df"] is:
-            # (1) pair_properties["nmr_types"] is the matrix of coupling types between every two atoms, so distant atoms are also included, like '11JCH'
-            # (2) pair_properties["nmr_types_df"] is the matrix of coupling types only based on the atom pairs in the pair dataframe. 
-            #     If the dataframe is a 6-path one, atom pairs with 7 or more bonds are not included, like '7JCH'. The not-included atom pairs are set to a '0' string.
-            if self.filetype == "dataframe":
-                try:
-                    atom_df = file[0]
-                    pair_df = file[1]
-                    shift, shift_var, coupling_array, coupling_vars, coupling_types = nmr_read_df(atom_df, pair_df, self.filename)
-
-                    self.pair_properties["nmr_types_df"] = coupling_types
-
-                    # Check if the non-zero elements of pair_properties["nmr_types_df"] also exists in pair_properties["nmr_types"]
-                    nmr_type_mask = self.pair_properties["nmr_types_df"] != '0'
-                    nmr_types_match = self.pair_properties["nmr_types_df"] == self.pair_properties["nmr_types"]
-
-                    if not (nmr_types_match == nmr_type_mask).all():
-                        logger.warning(f"Some coupling types in pair_properties['nmr_types_df'] do not match with pair_properties['nmr_types'] for molecule {self.id}")
-                
-                except Exception as e:
-                    logger.error(f'Fail to read NMR data for molecule {self.id} from dataframe')
-                    raise e
-            
-
-            # Read NMR data if self.file is an RDKit molecule object
-            elif self.filetype == "rdmol":
-                try:
-                    shift, shift_var, coupling_array, coupling_vars = nmr_read_rdmol(self.rdmol, self.id)
-                except Exception as e:
-                    logger.error(f'Fail to read NMR data for molecule {self.id} from rdkit molecule object')
-                    raise e
-            
-
-            # Read NMR data if self.file is an SDF file
-            elif self.filetype == 'sdf':
-                try:
-                    shift, shift_var, coupling_array, coupling_vars = nmr_read_sdf(self.file, self.streamlit)
-                except Exception as e:
-                    logger.error(f'Fail to read NMR data for molecule {self.id} from SDF file {self.file}')
-                    raise e
-            
-
-            # Read NMR data if self.file is a Gaussian .log file
-            elif self.filetype == 'gaussian-log':
-                try:
-                    shift, coupling_array = nmr_read_gaussian(self.file)
-                    shift_var = np.zeros_like(shift)
-                    coupling_vars = np.zeros_like(coupling_array)
-                except Exception as e:
-                    logger.error(f'Fail to read NMR data for molecule {self.id} from Gaussian .log file {self.file}')
-                    raise e
-
-
-            # Raise error if the file type is not among the above
-            else:
-                logger.error(f'File {self.id} with file type {self.filetype} is not supported for reading NMR data')
-                raise ValueError(f'File {self.id} with file type {self.filetype} is not supported for reading NMR data')
-
-
-            # If file type is 'gaussian-log', save the unscaled shift values in the "raw_shift" attribute of atom properties
-            # Then save the scaled shift values in the "shift" attribute
-            # The coupling values generally don't need to be scaled, so save them in the "coupling" attribute
-            if self.filetype == 'gaussian-log':
-                self.atom_properties["raw_shift"] = shift
-                self.atom_properties["shift_var"] = shift_var
-                self.pair_properties["coupling"] = coupling_array
-                self.pair_properties["coupling_var"] = coupling_vars
-
-                self.atom_properties["shift"] = scale_chemical_shifts(shift, self.type)
-
-            # Assign the NMR data to the atom and pair properties for other file types
-            else:
-                self.atom_properties["shift"] = shift
-                self.atom_properties["shift_var"] = shift_var
-                self.pair_properties["coupling"] = coupling_array
-                self.pair_properties["coupling_var"] = coupling_vars
+            # Read NMR data and assign to self.atom_properties and self.pair_properties
+            nmr_to_rdmol(self)
 
             # Check if the length of the shift array is equal to the number of atoms in the molecule
             if len(self.atom_properties["shift"]) != len(self.type):

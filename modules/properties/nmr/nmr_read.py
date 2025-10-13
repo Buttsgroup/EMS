@@ -336,3 +336,73 @@ def nmr_read_gaussian(file):
     shift_array, couplings = gaussian_read_nmr(file)
 
     return shift_array, couplings
+
+
+def nmr_read_cif(file):
+    '''
+    This function reads NMR data from a .cif file.
+    '''
+
+    with open(file, 'r') as f:
+        block = f.read()
+        lines = block.strip().split('\n')
+    
+    # Initialize lists to store chemical shifts and coupling constants
+    shift_list = []
+    coupling_list = []
+
+    # Initialize flags
+    shift_flag = False
+    coupling_flag = False
+
+    # Initialize the methods to read NMR data from .cif file
+    shift_method = None
+    coupling_method = None
+
+    for line in lines:
+        # Check for the start of chemical shift data block
+        if 'shiftml' in line.lower() and 'cs' in line.lower():
+            shift_flag = True
+            coupling_flag = False
+            shift_method = 'shiftml'
+            continue
+
+        ############ This section is reserved for reading coupling constants ############
+
+        ############ This section is reserved for reading coupling constants ############
+        
+        # Read chemical shift data
+        if shift_flag:
+            # ShiftML format
+            if shift_method == 'shiftml':
+                line_split = line.strip().split()
+                line_split = [item for item in line_split if item != '[' and item != ']']
+                shift_list.extend(line_split)
+                # Stop reading when reaching the end of the block
+                if ']' in line:
+                    shift_flag = False
+                    continue
+            
+            # Raise error if the format is not recognized
+            else:
+                logger.error(f'Unrecognized chemical shift format in .cif file: {file}')
+                raise ValueError(f'Unrecognized chemical shift format in .cif file: {file}')
+            
+        ############ This section is reserved for reading coupling constants ############
+
+        ############ This section is reserved for reading coupling constants ############
+
+    # Convert lists to numpy arrays
+    num_atom = len(shift_list)
+    shift_array = np.array(shift_list, dtype=np.float64)
+    shift_var = np.zeros(num_atom, dtype=np.float64)
+
+    if coupling_method is None:
+        coupling_array = np.zeros((num_atom, num_atom), dtype=np.float64)
+        coupling_var = np.zeros((num_atom, num_atom), dtype=np.float64)
+    else:
+        coupling_array = np.array(coupling_list, dtype=np.float64)
+        coupling_var = np.zeros_like(coupling_array, dtype=np.float64)
+    
+    return shift_array, shift_var, coupling_array, coupling_var
+        
