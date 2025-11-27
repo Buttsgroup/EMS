@@ -106,6 +106,7 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
     pair_props = []
     bond_existence = []
     aromatic_bond_order = []
+    nmr_types = []
 
     for propname in ems_list[0].pair_properties.keys():
         pair_props.append([])
@@ -125,6 +126,7 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
                 atom_index_0.append(t)
                 atom_index_1.append(t2)
                 dist.append(ems.path_distance[t][t2])
+                nmr_types.append(ems.pair_properties["nmr_types"][t][t2])
                 path_len.append(int(ems.path_topology[t][t2]))
                 bond_existence.append(ems.adj[t][t2])
                 aromatic_bond_order.append(ems.aromatic_conn[t][t2])
@@ -157,6 +159,7 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
         "atom_index_0": atom_index_0,
         "atom_index_1": atom_index_1,
         "distance": dist,
+        "nmr_types":nmr_types,
         "path_len": path_len,
         "bond_existence": bond_existence,
         "bond_order": aromatic_bond_order,
