@@ -83,4 +83,4 @@ def test_smiles_dataframe_generation():
     atoms_df, pairs_df = make_atoms_df(ems_list), make_pairs_df(ems_list)
     assert atoms_df.shape[0] == len(emol.type)
     assert 'nmr_types' in pairs_df.columns
-    assert int(pairs_df.loc[0, 'nmr_types'][0]) <=9
+    assert int(pairs_df.loc[0, 'nmr_types'].split('J')[0]) <= 9
