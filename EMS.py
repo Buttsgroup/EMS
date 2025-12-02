@@ -167,12 +167,11 @@ class EMS(object):
         # The error may be caused by wrong explicit valences which are greater than permitted
         self.symmetric = self.check_symmetric()
         
+        # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
+        self.get_coupling_types() 
         
         # Get NMR properties
-        if self.nmr:
-            # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
-            self.get_coupling_types()       
-
+        if self.nmr:      
             # Read NMR data and assign to self.atom_properties and self.pair_properties
             nmr_to_rdmol(self)
 

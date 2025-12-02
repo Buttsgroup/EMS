@@ -94,7 +94,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_type_limit=False):
+def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -106,7 +106,6 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
     pair_props = []
     bond_existence = []
     aromatic_bond_order = []
-    nmr_types = []
 
     for propname in ems_list[0].pair_properties.keys():
         pair_props.append([])
@@ -126,20 +125,10 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
                 atom_index_0.append(t)
                 atom_index_1.append(t2)
                 dist.append(ems.path_distance[t][t2])
-                nmr_types.append(ems.pair_properties["nmr_types"][t][t2])
                 path_len.append(int(ems.path_topology[t][t2]))
                 bond_existence.append(ems.adj[t][t2])
                 aromatic_bond_order.append(ems.aromatic_conn[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
-                    if nmr_type_limit == True and prop == "nmr_types":
-                        nmr_type = ems.pair_properties[prop][t][t2]
-                        nmr_type_path = nmr_type.split("J")[0]
-                        nmr_type_pair = nmr_type.split("J")[1]
-                        if int(nmr_type_path) > 9:
-                            pair_props[p].append("9J" + nmr_type_pair)
-                        else:
-                            pair_props[p].append(nmr_type)
-                    else:
                         pair_props[p].append(ems.pair_properties[prop][t][t2])
 
                 # for p, prop in enumerate(ems.pair_properties.keys()):
@@ -159,7 +148,6 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
         "atom_index_0": atom_index_0,
         "atom_index_1": atom_index_1,
         "distance": dist,
-        "nmr_types":nmr_types,
         "path_len": path_len,
         "bond_existence": bond_existence,
         "bond_order": aromatic_bond_order,
