@@ -1,6 +1,7 @@
 import os
 import numpy as np
 from EMS import EMS as ems
+from modules.dataframe_generation.dataframe_parse import make_atoms_df, make_pairs_df
 
 def test_smiles():
     # Test the EMS class with a SMILES string
@@ -39,7 +40,7 @@ def test_smiles():
 
     assert type(emol.mol_properties['SMILES']) == str
     assert emol.atom_properties == {}
-    assert emol.pair_properties == {}
+    assert len(emol.pair_properties) == 1 and 'nmr_types' in emol.pair_properties
 
 
 def test_smiles_no_id():
@@ -73,3 +74,13 @@ def test_smiles_no_id():
     assert emol.pass_valence_check == True
     assert emol.symmetric == 'sym'
     assert emol.nmr == False
+
+def test_smiles_dataframe_generation():
+    # Test the EMS class from SMILES string to dataframe
+    smiles = 'CC(=O)OC1=CC=CC=C1C(=O)O'
+    emol = ems.EMS(file=smiles, mol_id='testmol_smiles_df', nmr=False)
+    ems_list = [emol]
+    atoms_df, pairs_df = make_atoms_df(ems_list), make_pairs_df(ems_list)
+    assert atoms_df.shape[0] == len(emol.type)
+    assert 'nmr_types' in pairs_df.columns
+    assert int(pairs_df.loc[0, 'nmr_types'].split('J')[0]) <= 9
