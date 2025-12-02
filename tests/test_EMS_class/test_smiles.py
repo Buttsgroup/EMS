@@ -40,7 +40,7 @@ def test_smiles():
 
     assert type(emol.mol_properties['SMILES']) == str
     assert emol.atom_properties == {}
-    assert emol.pair_properties == {} or (len(emol.pair_properties) == 1 and emol.pair_properties.get('nmr_types') is not None)
+    assert len(emol.pair_properties) == 1 and 'nmr_types' in emol.pair_properties
 
 
 def test_smiles_no_id():
