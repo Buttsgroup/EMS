@@ -75,7 +75,7 @@ def test_smiles_no_id():
     assert emol.symmetric == 'sym'
     assert emol.nmr == False
 
-def test_smiles_no_id():
+def test_smiles_dataframe_generation():
     # Test the EMS class from SMILES string to dataframe
     smiles = 'CC(=O)OC1=CC=CC=C1C(=O)O'
     emol = ems.EMS(file=smiles, mol_id='testmol_smiles_df', nmr=False)
