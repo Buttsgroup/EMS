@@ -76,7 +76,8 @@ class EMS(object):
         streamlit=False,            # Streamlit mode is used to read the file from website
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
-        kekulize=True               # Whether to kekulize the rdkit molecule object
+        kekulize=True,              # Whether to kekulize the rdkit molecule object
+        chirality = False            # Whether to append chiral labels onto atom df
     ):
 
 
@@ -108,6 +109,7 @@ class EMS(object):
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
+        self.chirality = chirality         # Whether to add chirality as atom feature
 
 
         # Achieve the filetype, RDKit molecule object and its filename
@@ -167,7 +169,6 @@ class EMS(object):
         # The error may be caused by wrong explicit valences which are greater than permitted
         self.symmetric = self.check_symmetric()
         
-        
         # Get NMR properties
         if self.nmr:
             # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
@@ -189,6 +190,9 @@ class EMS(object):
             if not "NMREDATA_J" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_J", pair_lines)
 
+        if self.chirality:
+            self.get_chirality()
+
 
     def __str__(self):
         return f"EMS({self.id}), {self.mol_properties['SMILES']}"
@@ -208,6 +212,26 @@ class EMS(object):
             f"Pair properties: \n {self.pair_properties}, \n"
             f")"
         )
+    
+    def get_chirality(self):
+        full_chirality = []
+        mol = self.rdmol
+        centres_seen = 0
+        chiral_centres = Chem.FindMolChiralCenters(mol, includeUnassigned=True)
+        for atom in mol.GetAtoms():
+            if centres_seen+1 <= len(chiral_centres):
+                if atom.GetIdx() == chiral_centres[centres_seen][0]:
+                    full_chirality.append(chiral_centres[centres_seen][1])
+                    centres_seen +=1
+                else:
+                    full_chirality.append('0')
+            else:
+                full_chirality.append('0')
+
+        int_map = {'0':0,'R':1,'S':2,'?':3}
+        int_chirality = [int_map[x] for x in full_chirality]
+        self.atom_properties['chirality'] = int_chirality
+    
 
     def check_valence(self):
         """
@@ -394,6 +418,11 @@ class EMS(object):
     def get_conformers(self, params=None):
 
         return EMSconf(self, params=params)
+    
+
+
+
+
 
 
 
