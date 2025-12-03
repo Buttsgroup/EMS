@@ -77,7 +77,6 @@ class EMS(object):
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
         kekulize=True,              # Whether to kekulize the rdkit molecule object
-        chirality = False            # Whether to append chiral labels onto atom df
     ):
 
 
@@ -109,7 +108,6 @@ class EMS(object):
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
-        self.chirality = chirality         # Whether to add chirality as atom feature
 
 
         # Achieve the filetype, RDKit molecule object and its filename
@@ -190,8 +188,6 @@ class EMS(object):
             if not "NMREDATA_J" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_J", pair_lines)
 
-        if self.chirality:
-            self.get_chirality()
 
 
     def __str__(self):
@@ -214,6 +210,13 @@ class EMS(object):
         )
     
     def get_chirality(self):
+        """
+        Run this method to add chiral tags to the atom_df (nodes), 
+        0 = achiral (non-chiral atoms e.g. H and non-chiral carbons)
+        1 = R centre
+        2 = S centre
+        3 = chiral but exact chirality unknown or undefined
+        """
         full_chirality = []
         mol = self.rdmol
         centres_seen = 0
