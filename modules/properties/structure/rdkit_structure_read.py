@@ -278,7 +278,80 @@ def xyz_to_rdmol(file_path):
     
 
 # Dataframe read functionality
-def dataframe_to_rdmol(filtered_atom_df, mol_name):
+# def dataframe_to_rdmol(filtered_atom_df, mol_name):
+#     '''
+#     This function is used to read a molecular dataframe and convert it to an RDKit molecule object.
+
+#     Args:
+#     - filtered_atom_df (pd.DataFrame): The atom dataframe to be converted to an RDKit molecule object.
+#     - mol_name (str): The name of the molecule.
+#     '''
+
+#     # Get the sub-dataframe for the molecule according to the molecule name
+#     mol_atom_df = filtered_atom_df[filtered_atom_df['molecule_name'] == mol_name]
+
+#     # Check whether the atom indexes in the molecule are continuous
+#     # If not, that means two molecules in the atom dataframe share the same molecule name
+#     mol_index = list(mol_atom_df.index)
+
+#     continuous_check = True
+#     for i in range(len(mol_index)-1):
+#         if mol_index[i+1] - mol_index[i] != 1:
+#             continuous_check = False
+#             break
+
+#     if not continuous_check:
+#         logger.error(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
+#         raise ValueError(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
+
+
+#     # Get the atom coordinates, atom types and connectivity matrix from the atom dataframe
+#     xyz = mol_atom_df[['x', 'y', 'z']].to_numpy().tolist()
+#     atom_types = mol_atom_df['typestr'].tolist()
+
+#     xyz_with_atom = [((x, y, z), atom) for (x, y, z), atom in zip(xyz, atom_types)]
+#     conn_matrix = np.array(mol_atom_df['conn'].to_list(), dtype=int)
+
+#     # Map integers in the connectivity matrix to RDKit BondTypes
+#     BondType_dict = {
+#         1: BondType.SINGLE,
+#         2: BondType.DOUBLE,
+#         3: BondType.TRIPLE,
+#         4: BondType.AROMATIC
+#     }
+    
+#     # Get the atom indices in bonds and bond orders in the connectivity matrix
+#     bond_indices = [
+#         (i, j, BondType_dict.get(conn_matrix[i, j], BondType.SINGLE))
+#         for i in range(conn_matrix.shape[0])
+#         for j in range(i + 1, conn_matrix.shape[1])
+#         if conn_matrix[i, j] > 0
+#     ]
+
+#     # Create an RDKit molecule object and add atoms, bonds and atom coordinates to the molecule
+#     mol = Chem.RWMol()
+#     conf = Chem.Conformer(len(xyz_with_atom))
+    
+#     atom_indices = []
+#     for coord, atom in xyz_with_atom:
+#         rd_atom = Chem.Atom(atom)
+#         idx = mol.AddAtom(rd_atom)
+#         conf.SetAtomPosition(idx, coord)
+#         atom_indices.append(idx)
+        
+#     for idx1, idx2, bond in bond_indices:
+#         mol.AddBond(idx1, idx2, bond)
+
+#     # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
+#     mol.AddConformer(conf)
+#     rdmol = mol.GetMol()
+
+#     # Set the _Name property for the molecule
+#     rdmol.SetProp("_Name", mol_name)
+    
+#     return rdmol
+
+def dataframe_to_rdmol(filtered_atom_df, pair_df,mol_name):
     '''
     This function is used to read a molecular dataframe and convert it to an RDKit molecule object.
 
@@ -310,9 +383,19 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
     atom_types = mol_atom_df['typestr'].tolist()
 
     xyz_with_atom = [((x, y, z), atom) for (x, y, z), atom in zip(xyz, atom_types)]
-    conn_matrix = np.array(mol_atom_df['conn'].to_list(), dtype=int)
+  
+    # Create an RDKit molecule object and add atoms, bonds and atom coordinates to the molecule
+    mol = Chem.RWMol()
+    conf = Chem.Conformer(len(xyz_with_atom))
 
-    # Map integers in the connectivity matrix to RDKit BondTypes
+    atom_indices = []
+    for coord, atom in xyz_with_atom:
+        rd_atom = Chem.Atom(atom)
+        idx = mol.AddAtom(rd_atom)
+        conf.SetAtomPosition(idx, coord)
+        atom_indices.append(idx)
+
+    # Map integers in the pair_df bond order to RDKit BondTypes
     BondType_dict = {
         1: BondType.SINGLE,
         2: BondType.DOUBLE,
@@ -321,26 +404,13 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
     }
     
     # Get the atom indices in bonds and bond orders in the connectivity matrix
-    bond_indices = [
-        (i, j, BondType_dict.get(conn_matrix[i, j], BondType.SINGLE))
-        for i in range(conn_matrix.shape[0])
-        for j in range(i + 1, conn_matrix.shape[1])
-        if conn_matrix[i, j] > 0
-    ]
-
-    # Create an RDKit molecule object and add atoms, bonds and atom coordinates to the molecule
-    mol = Chem.RWMol()
-    conf = Chem.Conformer(len(xyz_with_atom))
-    
-    atom_indices = []
-    for coord, atom in xyz_with_atom:
-        rd_atom = Chem.Atom(atom)
-        idx = mol.AddAtom(rd_atom)
-        conf.SetAtomPosition(idx, coord)
-        atom_indices.append(idx)
-        
-    for idx1, idx2, bond in bond_indices:
-        mol.AddBond(idx1, idx2, bond)
+    for _, row in pair_df.iterrows():
+        i, j, order = int(row['atom_index_0']), int(row['atom_index_1']), int(row['bond_order'])
+        if order > 0:  # only add if bonded
+            bo = BondType_dict[order]
+            # avoid duplicate bonds
+            if mol.GetBondBetweenAtoms(i, j) is None:
+                mol.AddBond(i, j, bo)
 
     # Add the 3D coordinates to the molecule by the conformer. (Only conformer can store 3D coordinates)
     mol.AddConformer(conf)
@@ -350,7 +420,6 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
     rdmol.SetProp("_Name", mol_name)
     
     return rdmol
-
 
 def mol2_to_rdmol(file_path):
     '''

@@ -301,10 +301,11 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
         # Get the atom dataframe and the molecule name from the atom dataframe
         atom_df = file[0]
         mol_name = list(atom_df['molecule_name'])[0]
+        pair_df = file[1]
 
         # Get the RDKit molecule object from the atom dataframe
         try:
-            rdmol = dataframe_to_rdmol(atom_df, mol_name=mol_name)
+            rdmol = dataframe_to_rdmol(atom_df, pair_df,mol_name=mol_name)
         except:
             logger.error(f"Fail to read RDKit molecule from the atom dataframe")
             raise ValueError(f"Fail to read RDKit molecule from the atom dataframe")

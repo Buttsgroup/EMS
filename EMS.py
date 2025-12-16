@@ -18,6 +18,7 @@ from EMS.modules.conformer.EMSconf import EMSconf
 from rdkit import Chem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
+from rdkit.Chem import AllChem
 
 
 ########### Set up the logger system ###########
@@ -220,6 +221,8 @@ class EMS(object):
         full_chirality = []
         mol = self.rdmol
         centres_seen = 0
+        cid = AllChem.EmbedMolecule(self.rdmol) 
+        AllChem.AssignAtomChiralTagsFromStructure(self.rdmol, confId=cid) 
         chiral_centres = Chem.FindMolChiralCenters(mol, includeUnassigned=True)
         for atom in mol.GetAtoms():
             if centres_seen+1 <= len(chiral_centres):
