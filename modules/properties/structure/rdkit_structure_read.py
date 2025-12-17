@@ -305,12 +305,20 @@ def dataframe_to_rdmol(filtered_atom_df, mol_name):
         raise ValueError(f'The atom indexes in the molecule {mol_name} are not continuous. Two molecules may share the same molecule name.')
 
 
-    # Get the atom coordinates, atom types and connectivity matrix from the atom dataframe
+    # Get the atom coordinates and atom types from the atom dataframe
     xyz = mol_atom_df[['x', 'y', 'z']].to_numpy().tolist()
     atom_types = mol_atom_df['typestr'].tolist()
 
     xyz_with_atom = [((x, y, z), atom) for (x, y, z), atom in zip(xyz, atom_types)]
-    conn_matrix = np.array(mol_atom_df['conn'].to_list(), dtype=int)
+
+    # Get the connectivity matrix 
+    conn_list = []
+    for idx, row in mol_atom_df.iterrows():
+        conn = row['conn'].split()
+        conn = [int(i.strip().replace("[", "").replace("]", "")) for i in conn]
+        conn_list.append(conn)
+    
+    conn_matrix = np.array(conn_list, dtype=int)
 
     # Map integers in the connectivity matrix to RDKit BondTypes
     BondType_dict = {
