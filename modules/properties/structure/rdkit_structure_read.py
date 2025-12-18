@@ -497,8 +497,6 @@ def cif_to_rdmol(file_path):
         if len(lines) < 3:
             logger.error(f"Invalid cif file: {file_path}")
             raise ValueError(f"Invalid cif file: {file_path}")
-        
-        print(file_path)
     
     # Initialize the cell parameters
     cell_params = {'a': None, 'b': None, 'c': None,
