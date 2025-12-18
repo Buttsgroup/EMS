@@ -2,10 +2,6 @@ import numpy as np
 import logging
 import sys
 import re
-from pymatgen.core import Structure
-from pymatgen.analysis.graphs import StructureGraph
-from pymatgen.analysis.local_env import JmolNN
-from pymatgen.io.cif import CifParser
 
 from rdkit import Chem
 from rdkit.Chem.rdDetermineBonds import DetermineBonds
@@ -489,6 +485,13 @@ def cif_to_rdmol(file_path):
     Args:
     - file_path (str): The path to the cif file.
     '''
+    try:
+        from pymatgen.core import Structure
+        from pymatgen.analysis.graphs import StructureGraph
+        from pymatgen.analysis.local_env import JmolNN
+        from pymatgen.io.cif import CifParser
+    except:
+         logger.error(f"Pymatgen needed to be installed to use function cif_to_rdmol")
 
     with open(file_path, 'r') as f:
         # Read the lines in the cif file and check whether the file includes molecule information
