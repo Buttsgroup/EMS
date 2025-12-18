@@ -6,13 +6,13 @@ from pymatgen.core import Structure
 from pymatgen.analysis.graphs import StructureGraph
 from pymatgen.analysis.local_env import JmolNN
 from pymatgen.io.cif import CifParser
-from gemmi import cif
 
 from rdkit import Chem
 from rdkit.Chem.rdDetermineBonds import DetermineBonds
 from rdkit.Chem.rdchem import BondType
 
 from EMS.utils.lattice import frac_to_cart
+from EMS.utils.periodic_table import Get_periodic_table
 
 
 ########### Set up the logger system ###########
@@ -632,8 +632,15 @@ def cif_to_rdmol(file_path):
     # build a list of sites 
     # sites = a list of atoms and fractional coordinates ordered like the CIF file
     sites = []
+    valid_elements = set(Get_periodic_table().values())
+
     for lbl, sp, x, y, z in zip(labels, species, fract_x, fract_y, fract_z):
-        sites.append([sp, float(x), float(y), float(z)])   
+        try:
+            if sp in valid_elements:
+                sites.append([sp, float(x), float(y), float(z)])
+        except ValueError:
+            pass
+        continue   
 
     # build final pymatgen structure - use the lattice object with lattice parameters we built earlier 
     custom_structure = Structure(lattice, 
