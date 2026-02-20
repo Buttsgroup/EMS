@@ -14,6 +14,8 @@ from EMS.modules.properties.file_io import nmr_to_rdmol, nmr_to_csdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
 from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_block
+from EMS.modules.conformer.EMSconf import EMSconf
+
 # from EMS.modules.conformer.EMSconf import EMSconf
 
 from rdkit import Chem
@@ -230,6 +232,7 @@ class EMS(object):
             f"Path distance: \n {self.path_distance}, \n"
             f"Atom properties: \n {self.atom_properties}, \n"
             f"Pair properties: \n {self.pair_properties}, \n"
+            f"Molecule properties \n {self.mol_properties} \n"
             f")"
         )
 
