@@ -11,6 +11,7 @@ from EMS.modules.properties.structure.rdkit_structure_read import xyz_to_rdmol
 from EMS.modules.properties.structure.rdkit_structure_read import mol2_to_rdmol
 from EMS.modules.properties.structure.rdkit_structure_read import dataframe_to_rdmol
 from EMS.modules.properties.structure.rdkit_structure_read import cif_to_rdmol
+from EMS.modules.properties.structure.csd_structure_read import cif_to_csdmol
 from EMS.modules.properties.structure.rdkit_structure_read import structure_arrays_to_rdmol_NoConn
 from EMS.modules.properties.nmr.nmr_read import nmr_read_sdf
 from EMS.modules.properties.nmr.nmr_read import nmr_read_rdmol
@@ -122,9 +123,6 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
         - The name for the RDKit molecule is assigned in the order of _Name, mol_id.
         - The .mol2 file usually includes a name in the first line of the @<TRIPOS>MOLECULE section.
         - The official name for the EMS molecule will be obtained from the '_Name' property of the name-assigned RDKit molecule object.
-    (8) .cif file (str)
-        - The .cif files usually don't include a name for the molecule, so it is recommended to set a name for the molecule using the 'mol_id' argument.
-        - All of the id and official name for the EMS molecule and the name in the RDKit molecule object will be usually the same.
     '''
 
     file_type = None
@@ -184,24 +182,11 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
             # The official name is obtained from the _Name property of the name-assigned RDKit molecule object
             rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
             official_name = rdmol.GetProp("_Name")
-
-        
-        # Check if the file is a .cif file
-        elif file.endswith('.cif'):
-            file_type = 'cif'
-
-            # Get the RDKit molecule object from the cif file
-            try:
-                rdmol = cif_to_rdmol(file)
-            except:
-                logger.error(f"Fail to read RDKit molecule from the cif file: {file}")
-                raise ValueError(f"Fail to read RDKit molecule from the cif file: {file}")
             
             # Assign a name to the RDKit molecule object and get the official name from the _Name property
             # Because the .cif files usually don't include a name for the molecule, the id and official name for the EMS molecule and the name in the RDKit molecule object will be the same.
             rdmol = assign_rdmol_name(rdmol, mol_id=mol_id)
             official_name = rdmol.GetProp("_Name")
-
         
         # Check if the file is a .log file
         elif file.endswith('.log'):
@@ -327,6 +312,24 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
     # Return the file type, official name and RDKit molecule object
     return file_type, official_name, rdmol
 
+def file_to_csdmol(file, mol_id=None):
+        
+    file_type = 'cif'
+    official_name = None
+
+    try:
+        csdmol = cif_to_csdmol(file)
+    except:
+        logger.error(f"Fail to read csdmol molecule from the cif file: {file}")
+        raise ValueError(f"Fail to read csdmol molecule from the cif file: {file}")
+    try:
+        official_name = csdmol.identifier
+    except: 
+        official_name = mol_id
+
+    return file_type, official_name, csdmol
+
+
 
 def nmr_to_rdmol(rdmol):
     '''
@@ -391,13 +394,13 @@ def nmr_to_rdmol(rdmol):
             logger.error(f'Fail to read NMR data for molecule {rdmol.id} from Gaussian .log file {rdmol.file}')
             raise e
         
-    # Read NMR data if rdmol.file is a .cif file
-    elif rdmol.filetype == 'cif':
-        try:
-            shift, shift_var, coupling_array, coupling_vars = nmr_read_cif(rdmol.file)
-        except Exception as e:
-            logger.error(f'Fail to read NMR data for molecule {rdmol.id} from .cif file {rdmol.file}')
-            raise e
+    # # Read NMR data if rdmol.file is a .cif file
+    # elif rdmol.filetype == 'cif':
+    #     try:
+    #         shift, shift_var, coupling_array, coupling_vars = nmr_read_cif(rdmol.file)
+    #     except Exception as e:
+    #         logger.error(f'Fail to read NMR data for molecule {rdmol.id} from .cif file {rdmol.file}')
+    #         raise e
 
     # Raise error if the file type is not among the above
     else:
@@ -423,3 +426,40 @@ def nmr_to_rdmol(rdmol):
         rdmol.pair_properties["coupling"] = coupling_array
         rdmol.pair_properties["coupling_var"] = coupling_vars
 
+def nmr_to_csdmol(ems, cif_file=None):
+    #read NMR data if file type is 'cif'
+    if cif_file is None:
+        raise ValueError("cif_file is required for nmr_to_csdmol")
+    try:
+        shift_array, shift_var, coupling_array, coupling_var, sigma_xx, sigma_yy, sigma_zz, = nmr_read_cif(cif_file)
+    except Exception as e:
+        mol_id = getattr(ems.csdmol, "identifier", None)
+        logger.error(f'Fail to read NMR data for molecule {mol_id} from .cif file {cif_file}')
+        raise e
+    n_atoms = len(ems.csdmol.atoms)
+    
+    # Handle shift data
+    if shift_array is not None:
+        ems.atom_properties["shift"] = shift_array
+        ems.atom_properties["shift_var"] = shift_var
+    else:
+        ems.atom_properties["shift"] = np.zeros(n_atoms, dtype=np.float64)
+        ems.atom_properties["shift_var"] = np.zeros(n_atoms, dtype=np.float64)
+    
+    # Handle coupling data
+    if coupling_array is not None:
+        ems.pair_properties["coupling"] = coupling_array
+        ems.pair_properties["coupling_var"] = coupling_var
+    else:
+        ems.pair_properties["coupling"] = np.zeros((n_atoms, n_atoms), dtype=np.float64)
+        ems.pair_properties["coupling_var"] = np.zeros((n_atoms, n_atoms), dtype=np.float64)
+    
+    # Handle sigma tensor data
+    if sigma_xx is not None:
+        ems.atom_properties["sigma_xx"] = sigma_xx
+        ems.atom_properties["sigma_yy"] = sigma_yy
+        ems.atom_properties["sigma_zz"] = sigma_zz
+    else:
+        ems.atom_properties["sigma_xx"] = np.zeros(n_atoms, dtype=np.float64)
+        ems.atom_properties["sigma_yy"] = np.zeros(n_atoms, dtype=np.float64)
+        ems.atom_properties["sigma_zz"] = np.zeros(n_atoms, dtype=np.float64)

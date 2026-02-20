@@ -5,9 +5,11 @@ import os
 from copy import deepcopy
 import string
 import random
+from ccdc.molecule import Molecule, Atom, Bond
 
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, rdDetermineBonds
+from rdkit.Geometry import Point3D
 
 
 ########### Set up the logger system ###########

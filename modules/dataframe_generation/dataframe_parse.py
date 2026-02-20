@@ -37,7 +37,11 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
             conns.append(ems.conn[t])
             smiles.append(ems.mol_properties["SMILES"])
             for p, prop in enumerate(ems.atom_properties.keys()):
-                atom_props[p].append(ems.atom_properties[prop][t])
+            # Only append if index exists
+                if t < len(ems.atom_properties[prop]):
+                    atom_props[p].append(ems.atom_properties[prop][t])
+                else:
+                    atom_props[p].append(None)
 
             # for p, prop in enumerate(ems.atom_properties.keys()):
             #     if prop == 'shift' and atom_list == 'all':
@@ -126,8 +130,11 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6, nmr_typ
                 atom_index_1.append(t2)
                 dist.append(ems.path_distance[t][t2])
                 path_len.append(int(ems.path_topology[t][t2]))
-                bond_existence.append(ems.adj[t][t2])
-                aromatic_bond_order.append(ems.aromatic_conn[t][t2])
+                if ems.adj is not None:
+                    bond_existence.append(ems.adj[t][t2])
+                else:
+                    bond_existence.append(1 if ems.conn[t][t2] > 0 else 0)
+                aromatic_bond_order.append(ems.aromatic_conn[t][t2] if ems.aromatic_conn is not None else ems.conn[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
                     if nmr_type_limit == True and prop == "nmr_types":
                         nmr_type = ems.pair_properties[prop][t][t2]
