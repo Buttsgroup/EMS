@@ -188,7 +188,11 @@ class EMS(object):
         # Check if the non-hydrogen backbone of the molecule is symmetric
         # If there is any error when calling the self.check_symmetric() function, self.symmetric will be set to 'Error'
         # The error may be caused by wrong explicit valences which are greater than permitted
-        self.symmetric = self.check_symmetric()
+            self.symmetric = self.check_symmetric()
+
+        elif self.filetype == 'cif':
+            self.pass_valence_check = None
+            self.symmetric = None
         
         # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
         self.get_coupling_types() 
