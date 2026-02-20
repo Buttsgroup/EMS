@@ -177,3 +177,48 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
             pairs.to_parquet(f"{write}/pairs.parquet")
     else:
         return pairs
+    
+def make_mol_prop_df(ems_list, write=False, format="pickle"):
+    molecule_name = []
+    mol_props = []
+    for prop_name in ems_list[0].mol_properties.keys():
+        mol_props.append([])
+
+    pbar = tqdm(ems_list, desc="Constructing mol_prop dictionary", leave=False)
+    m = -1
+    for ems in pbar:
+        m += 1
+        # Add atom values to lists
+        for t, type in enumerate(ems.type):
+            molecule_name.append(ems.id)
+            for p, prop in enumerate(ems.mol_properties.keys()):
+                mol_props[p].append(ems.mol_properties[prop][t])
+
+    # Construct dataframe
+    mol_prop = {
+        "molecule_name": molecule_name,
+    }
+
+    for p, propname in enumerate(ems.mol_properties.keys()):
+        mol_prop[propname] = mol_props[p]
+
+    mol_prop = pd.DataFrame(mol_prop)
+    pbar.close()
+
+    mol_prop.astype(
+        {
+            "molecule_name": "category",
+        }
+    )
+
+    if write:
+        if format == "csv":
+            mol_prop.to_csv(f"{write}/mol_prop.csv")
+        elif format == "pickle":
+            mol_prop.to_pickle(f"{write}/mol_prop.pkl")
+        elif format == "parquet":
+            mol_prop.to_parquet(f"{write}/mol_prop.parquet")
+
+    else:
+        return mol_prop
+
