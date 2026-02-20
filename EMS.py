@@ -176,17 +176,20 @@ class EMS(object):
             nmr_to_rdmol(self)
 
             # Check if the length of the shift array is equal to the number of atoms in the molecule
-            if len(self.atom_properties["shift"]) != len(self.type):
-                logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
-                raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
+            if "shift" in self.atom_properties and self.atom_properties["shift"] is not None:
+                if len(self.atom_properties["shift"]) != len(self.type):
+                    logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
+                    raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
             
             # Add chemical shifts and coupling constants in SDF format to rdmol properties
-            atom_lines, pair_lines = nmr_to_sdf_block(self.type, self.atom_properties, self.pair_properties)
+            atom_lines, pair_lines, mol_lines = nmr_to_sdf_block(self.type, self.atom_properties, self.pair_properties, self.mol_properties)
 
             if not "NMREDATA_ASSIGNMENT" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
             if not "NMREDATA_J" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_J", pair_lines)
+            if not "NMREDATA_ASSIGNMENT" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
+                self.rdmol.SetProp("NMREDATA_ASSIGNMENT", mol_lines)
 
 
     def __str__(self):
@@ -205,6 +208,7 @@ class EMS(object):
             f"Path distance: \n {self.path_distance}, \n"
             f"Atom properties: \n {self.atom_properties}, \n"
             f"Pair properties: \n {self.pair_properties}, \n"
+            f"Molecule properties \n {self.mol_properties} \n"
             f")"
         )
 

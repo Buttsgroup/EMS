@@ -16,12 +16,13 @@ logger.setLevel(logging.INFO)
 
 def nmr_to_sdf_block(atom_types, atom_properties, pair_properties):
     '''
-    This function reads the NMR data saved in EMS molecule's atom and pair properties and converts them to the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> sections in SDF block.
+    This function reads the 'NMR' #### change to 'data'?? ##### data saved in EMS molecule's atom and pair properties and converts them to the <NMREDATA_ASSIGNMENT> and <NMREDATA_J> sections in SDF block.
 
     Args:
     - atom_types (list): List of atom types of one EMS molecule
     - atom_properties (dict): Dictionary of atom properties, including chemical shifts and their variances
     - pair_properties (dict): Dictionary of pair properties, including coupling constants, their variances, and types
+    - mol_properties (dict): Dictionary of molecule properties, e.g. including xray intensity values and q values
     '''
 
     # Create the SDF block for chemical shift data
@@ -57,6 +58,6 @@ def nmr_to_sdf_block(atom_types, atom_properties, pair_properties):
                 pair_lines.append(line)
 
     pair_block = '\n'.join(pair_lines)
-    
+
     # Return the atom and pair lines in the SDF block
     return atom_block, pair_block

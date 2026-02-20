@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 import logging
+import re
 
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_nmr
 
@@ -342,67 +343,44 @@ def nmr_read_cif(file):
     '''
     This function reads NMR data from a .cif file.
     '''
+    with open(file) as f:
+        lines = f.readlines()
 
-    with open(file, 'r') as f:
-        block = f.read()
-        lines = block.strip().split('\n')
-    
-    # Initialize lists to store chemical shifts and coupling constants
-    shift_list = []
-    coupling_list = []
-
-    # Initialize flags
-    shift_flag = False
-    coupling_flag = False
-
-    # Initialize the methods to read NMR data from .cif file
-    shift_method = None
-    coupling_method = None
+    tensor_flag = False
+    tensor_lines = []
+    total_diags = []
 
     for line in lines:
-        # Check for the start of chemical shift data block
-        if 'shiftml' in line.lower() and 'cs' in line.lower():
-            shift_flag = True
-            coupling_flag = False
-            shift_method = 'shiftml'
-            continue
-
-        ############ This section is reserved for reading coupling constants ############
-
-        ############ This section is reserved for reading coupling constants ############
+        line = line.strip()
         
-        # Read chemical shift data
-        if shift_flag:
-            # ShiftML format
-            if shift_method == 'shiftml':
-                line_split = line.strip().split()
-                line_split = [item.replace('[','').replace(']','') for item in line_split if item != '[' and item != ']']
-                shift_list.extend(line_split)
-                # Stop reading when reaching the end of the block
-                if ']' in line:
-                    shift_flag = False
-                    continue
-            
-            # Raise error if the format is not recognized
-            else:
-                logger.error(f'Unrecognized chemical shift format in .cif file: {file}')
-                raise ValueError(f'Unrecognized chemical shift format in .cif file: {file}')
-            
-        ############ This section is reserved for reading coupling constants ############
-
-        ############ This section is reserved for reading coupling constants ############
-
-    # Convert lists to numpy arrays
-    num_atom = len(shift_list)
-    shift_array = np.array(shift_list, dtype=np.float64)
-    shift_var = np.zeros(num_atom, dtype=np.float64)
-
-    if coupling_method is None:
-        coupling_array = np.zeros((num_atom, num_atom), dtype=np.float64)
-        coupling_var = np.zeros((num_atom, num_atom), dtype=np.float64)
-    else:
-        coupling_array = np.array(coupling_list, dtype=np.float64)
-        coupling_var = np.zeros_like(coupling_array, dtype=np.float64)
-    
-    return shift_array, shift_var, coupling_array, coupling_var
+        # Start tensor block
+        if line.startswith('[[') and not tensor_flag:
+            tensor_flag = True
+            tensor_lines = [line]  # include first line
+            continue  # go to next line
         
+        if tensor_flag:
+            tensor_lines.append(line)
+            
+            if ']]' in line:
+                tensors = ''.join(tensor_lines)
+                tensors = tensors.strip()
+                
+                if tensors.startswith('[[') and tensors.endswith(']]'):
+                    tensors = tensors[2:-2]
+            
+                rows = tensors.split('][')
+                matrix = [list(map(float, row.split())) for row in rows]
+                tensor_arr = np.array(matrix)
+            
+                total_diags.append(np.diag(tensor_arr))
+                
+                tensor_flag = False
+                tensor_lines = []
+
+    diags_arr = np.array(total_diags)
+    sigma_xx_array  = diags_arr[:, 0]
+    sigma_yy_array = diags_arr[:, 1]
+    sigma_zz_array  = diags_arr[:, 2]
+
+    return sigma_xx_array, sigma_yy_array, sigma_zz_array

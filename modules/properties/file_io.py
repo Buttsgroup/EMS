@@ -394,7 +394,7 @@ def nmr_to_rdmol(rdmol):
     # Read NMR data if rdmol.file is a .cif file
     elif rdmol.filetype == 'cif':
         try:
-            shift, shift_var, coupling_array, coupling_vars = nmr_read_cif(rdmol.file)
+            sigma_xx_array, sigma_yy_array, sigma_zz_array = nmr_read_cif(rdmol.file)
         except Exception as e:
             logger.error(f'Fail to read NMR data for molecule {rdmol.id} from .cif file {rdmol.file}')
             raise e
@@ -416,10 +416,20 @@ def nmr_to_rdmol(rdmol):
 
         rdmol.atom_properties["shift"] = scale_chemical_shifts(shift, rdmol.type)
 
+    elif rdmol.filetype == 'cif':
+        if sigma_xx_array is not None and len(sigma_xx_array) > 0:
+            rdmol.atom_properties["sigma_xx"] = sigma_xx_array
+            rdmol.atom_properties["sigma_yy"] = sigma_yy_array
+            rdmol.atom_properties["sigma_zz"] = sigma_zz_array
+
+        if shift is not None and len(shift) > 0:
+            rdmol.atom_properties["shift"] = shift
+            
     # Assign the NMR data to the atom and pair properties for other file types
     else:
         rdmol.atom_properties["shift"] = shift
         rdmol.atom_properties["shift_var"] = shift_var
         rdmol.pair_properties["coupling"] = coupling_array
         rdmol.pair_properties["coupling_var"] = coupling_vars
+        
 
