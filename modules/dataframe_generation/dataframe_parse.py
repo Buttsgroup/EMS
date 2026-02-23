@@ -181,35 +181,29 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
 def make_mol_prop_df(ems_list, write=False, format="pickle"):
     molecule_name = []
     mol_props = []
-    for prop_name in ems_list[0].mol_properties.keys():
-        mol_props.append([])
+    
+    prop_names = list(ems_list[0].mol_properties.keys())
+    print(prop_names)
+    mol_props = [[] for _ in prop_names]
 
     pbar = tqdm(ems_list, desc="Constructing mol_prop dictionary", leave=False)
-    m = -1
+
     for ems in pbar:
-        m += 1
-        # Add atom values to lists
-        for t, type in enumerate(ems.type):
-            molecule_name.append(ems.id)
-            for p, prop in enumerate(ems.mol_properties.keys()):
-                mol_props[p].append(ems.mol_properties[prop][t])
+        molecule_name.append(ems.id)
 
-    # Construct dataframe
-    mol_prop = {
-        "molecule_name": molecule_name,
-    }
+        for p, prop in enumerate(ems.mol_properties.keys()):
+            mol_props[p].append(ems.mol_properties[prop])
+        
+        pbar.close()
 
-    for p, propname in enumerate(ems.mol_properties.keys()):
-        mol_prop[propname] = mol_props[p]
+    # construct dataframe dictionary
+    mol_prop = {"molecule_name": molecule_name}
 
+    for p, prop_name in enumerate(prop_names):
+        mol_prop[prop_name] = mol_props[p]
+    
     mol_prop = pd.DataFrame(mol_prop)
-    pbar.close()
-
-    mol_prop.astype(
-        {
-            "molecule_name": "category",
-        }
-    )
+    mol_prop["molecule_name"] = mol_prop["molecule_name"].astype("category")
 
     if write:
         if format == "csv":
