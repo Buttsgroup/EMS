@@ -10,9 +10,10 @@ from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_sdf_
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_aromatic_bond_array
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_xyz_block
 from EMS.modules.properties.file_io import file_to_rdmol, file_to_csdmol
-from EMS.modules.properties.file_io import nmr_to_rdmol, nmr_to_csdmol
+from EMS.modules.properties.file_io import nmr_to_rdmol, nmr_to_csdmol, xrd_to_csdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
+from EMS.modules.properties.XRD.xrd_write import xray_to_sdf_block
 from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_block
 from EMS.modules.conformer.EMSconf import EMSconf
 
@@ -78,6 +79,7 @@ class EMS(object):
         file,                       # The file to read
         mol_id=None,                # Customized molecule ID
         nmr=False,                  # Whether to read NMR data
+        xrd = False,                # Whether to read XRD data
         streamlit=False,            # Streamlit mode is used to read the file from website
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
@@ -112,6 +114,7 @@ class EMS(object):
         self.pass_valence_check = None     # Whether the molecule has correct valence
         self.symmetric = None              # A string among 'sym', 'asym' and 'error' to indicate whether the non-hydrogen backbone of the molecule is symmetric
         self.nmr = nmr                     # Whether to read NMR data
+        self.xrd = xrd                     # Whether to read XRD data
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
@@ -218,6 +221,14 @@ class EMS(object):
                 self.rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
             if not "NMREDATA_J" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_J", pair_lines)
+
+        # Get molecule properties
+        if self.xrd:
+            # Read XRD data and assign to self.mol_properties
+            if self.filetype == "cif":
+                xrd_to_csdmol(self, self.file)
+
+            # Add molecular properties in SDF format to csdmol properties
 
 
     def __str__(self):
