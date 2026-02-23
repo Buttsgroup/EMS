@@ -316,19 +316,15 @@ def file_to_rdmol(file, mol_id=None, streamlit=False):
 def file_to_csdmol(file, mol_id=None):
         
     file_type = 'cif'
-    official_name = None
+    csd_filename = None
 
     try:
-        csdmol = cif_to_csdmol(file)
+        csdmol, csd_filename = cif_to_csdmol(file)
     except:
         logger.error(f"Fail to read csdmol molecule from the cif file: {file}")
         raise ValueError(f"Fail to read csdmol molecule from the cif file: {file}")
-    try:
-        official_name = csdmol.identifier
-    except: 
-        official_name = mol_id
 
-    return file_type, official_name, csdmol
+    return file_type, csd_filename, csdmol
 
 
 
@@ -465,17 +461,17 @@ def nmr_to_csdmol(ems, cif_file=None):
         ems.atom_properties["sigma_yy"] = np.zeros(n_atoms, dtype=np.float64)
         ems.atom_properties["sigma_zz"] = np.zeros(n_atoms, dtype=np.float64)
 
-def xrd_to_csdmol(csdmol, cif=None):
+def xrd_to_csdmol(ems, cif=None):
     # read XRD data if file type is 'cif'
     if cif is None:
         raise ValueError("cif_file is required for xrd_to_csdmol")
     try:
         q_vals, intensities = xrd_read_cif(cif)
     except Exception as e:
-        mol_id = getattr(csdmol.id, "identifier", None)
+        mol_id = getattr(ems.csd_filename, "identifier", None)
         logger.error(f'Fail to read XRD data for molecule {mol_id} from .cif file {cif}')
         raise e 
     
     # Handle XRD data
-    csdmol.mol_properties["q_val"] = q_vals
-    csdmol.mol_properties["intensity"] = intensities
+    ems.mol_properties["q_val"] = q_vals
+    ems.mol_properties["intensity"] = intensities

@@ -125,7 +125,7 @@ class EMS(object):
         # The filename is the official name of the file to read.
         # Details of the definition of filename for different file types are in EMS.modules.properties.file_io
         
-        self.filetype, self.csd_filename, self.csdmol = file_to_csdmol(self.file, mol_id=self.id)
+        self.filetype, self.csd_filename, self.csdmol = file_to_csdmol(self.file, mol_id=self.csd_filename)
         if self.filetype != "cif":
             self.filetype, self.filename, self.rdmol = file_to_rdmol(self.file, mol_id=self.id, streamlit=self.streamlit)
         else:

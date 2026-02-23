@@ -15,4 +15,4 @@ def cif_to_csdmol(file):
     csdmol = heaviest_component
 
 
-    return csdmol
+    return csdmol, mols.identifier

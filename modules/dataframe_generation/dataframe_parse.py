@@ -189,12 +189,13 @@ def make_mol_prop_df(ems_list, write=False, format="pickle"):
     pbar = tqdm(ems_list, desc="Constructing mol_prop dictionary", leave=False)
 
     for ems in pbar:
-        molecule_name.append(ems.id)
+        print(ems.csd_filename)
+        molecule_name.append(ems.csd_filename)
 
         for p, prop in enumerate(ems.mol_properties.keys()):
             mol_props[p].append(ems.mol_properties[prop])
         
-        pbar.close()
+    pbar.close()
 
     # construct dataframe dictionary
     mol_prop = {"molecule_name": molecule_name}
