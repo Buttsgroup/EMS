@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from EMS import EMS as ems
-from modules.dataframe_generation.dataframe_parse import make_atoms_df, make_pairs_df
+from EMS.modules.dataframe_generation.dataframe_parse import make_atoms_df, make_pairs_df
 
 def test_smiles():
     # Test the EMS class with a SMILES string
