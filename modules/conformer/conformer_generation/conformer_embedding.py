@@ -59,7 +59,6 @@ def check_rdkit_conformer_embedding_params(params):
     params.setdefault("rdkit_CE_trackFailures", False)
     params.setdefault("rdkit_CE_useBasicKnowledge", True)
     params.setdefault("rdkit_CE_useExpTorsionAnglePrefs", True)
-    params.setdefault("rdkit_CE_useMacrocycle14config", True)
     params.setdefault("rdkit_CE_useMacrocycleTorsions", True)
     params.setdefault("rdkit_CE_useRandomCoords", False)
     params.setdefault("rdkit_CE_useSmallRingTorsions", False)

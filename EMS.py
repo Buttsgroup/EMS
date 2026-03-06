@@ -153,7 +153,7 @@ class EMS(object):
         self.type, self.xyz, self.conn = rdmol_to_structure_arrays(self.rdmol)
         self.aromatic_conn = rdmol_to_aromatic_bond_array(self.rdmol)
         self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
-        self.path_topology, self.path_distance = self.get_graph_distance()
+        self.path_topology, self.path_distance = self.get_path_topology(), self.get_path_distance()
         self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
         self.flat = self.check_Zcoords_zero() 
 
@@ -293,18 +293,26 @@ class EMS(object):
             return 'error'
 
 
-    def get_graph_distance(self):
+    def get_path_topology(self):
         """
-        Get the path length matrix and 3D distance matrix.
-        The path length matrix is the shortest path length between atoms. Shape: (n_atoms, n_atoms)
-        The 3D distance matrix is the 3D distance between atoms. Shape: (n_atoms, n_atoms)
+        Get the path length matrix, which is the shortest path length between atoms. Shape: (n_atoms, n_atoms)
         """
-        
+
         try:
-            return Chem.GetDistanceMatrix(self.rdmol).astype(int), Chem.Get3DDistanceMatrix(self.rdmol)
+            return Chem.GetDistanceMatrix(self.rdmol).astype(int)
         except Exception as e:
-            logger.error(f"Fail to get the path length matrix and 3D distance matrix for molecule {self.id}")
-            raise e
+            logger.error(f"Fail to get the path length matrix for molecule {self.id}")
+
+
+    def get_path_distance(self):
+        """
+        Get the 3D distance matrix, which is the 3D distance between atoms. Shape: (n_atoms, n_atoms)
+        """
+
+        try:
+            return Chem.Get3DDistanceMatrix(self.rdmol)
+        except Exception as e:
+            logger.error(f"Fail to get the 3D distance matrix for molecule {self.id}")
 
 
     def get_coupling_types(self) -> None:
@@ -318,7 +326,7 @@ class EMS(object):
         p_table = Get_periodic_table()
 
         if self.path_topology is None:
-            self.path_topology, self.path_distance = self.get_graph_distance()
+            self.path_topology = self.get_path_topology()
 
         cpl_types = []
         for t, type in enumerate(self.type):
