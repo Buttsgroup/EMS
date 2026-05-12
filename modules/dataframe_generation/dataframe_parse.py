@@ -98,7 +98,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
+def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=10000):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -183,13 +183,11 @@ def make_mol_prop_df(ems_list, write=False, format="pickle"):
     mol_props = []
     
     prop_names = list(ems_list[0].mol_properties.keys())
-    print(prop_names)
     mol_props = [[] for _ in prop_names]
 
     pbar = tqdm(ems_list, desc="Constructing mol_prop dictionary", leave=False)
 
     for ems in pbar:
-        print(ems.csd_filename)
         molecule_name.append(ems.csd_filename)
 
         for p, prop in enumerate(ems.mol_properties.keys()):
@@ -204,6 +202,7 @@ def make_mol_prop_df(ems_list, write=False, format="pickle"):
         mol_prop[prop_name] = mol_props[p]
     
     mol_prop = pd.DataFrame(mol_prop)
+    mol_prop["dummy_mol"] = 0
     mol_prop["molecule_name"] = mol_prop["molecule_name"].astype("category")
 
     if write:

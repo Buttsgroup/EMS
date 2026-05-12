@@ -5,7 +5,6 @@ import os
 from copy import deepcopy
 import string
 import random
-from ccdc.molecule import Molecule, Atom, Bond
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdDetermineBonds
@@ -198,7 +197,7 @@ def rdmol_to_sdf_block(rdmol, FileInfo=None, FileComment=None, SDFversion="V3000
     # Set the name of the temporary SDF file to save the RDKit molecule
     characters = string.ascii_letters + string.digits  
     random_string = ''.join(random.choices(characters, k=30))
-    tmp_file = f"tmp_{random_string}.sdf"    
+    tmp_file = f"tmp_{random_string}.sdf"  
 
     # Set the SDF file version according to the atom number of the RDKit molecule
     atom_num = rdmol.GetNumAtoms()

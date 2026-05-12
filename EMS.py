@@ -5,7 +5,7 @@ import sys
 from datetime import date
 
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_structure_arrays
-from EMS.modules.properties.structure.csd_structure_write import csdmol_to_structure_arrays
+from EMS.modules.properties.structure.csd_structure_write import csdmol_to_structure_arrays, csdmol_to_sdf_block
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_sdf_block
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_aromatic_bond_array
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_xyz_block
@@ -124,7 +124,7 @@ class EMS(object):
         # Achieve the filetype, CSD molecule object and its filename
         # The filename is the official name of the file to read.
         # Details of the definition of filename for different file types are in EMS.modules.properties.file_io
-        
+       
         self.filetype, self.csd_filename, self.csdmol = file_to_csdmol(self.file, mol_id=self.csd_filename)
         if self.filetype != "cif":
             self.filetype, self.filename, self.rdmol = file_to_rdmol(self.file, mol_id=self.id, streamlit=self.streamlit)
@@ -349,21 +349,21 @@ class EMS(object):
 
                 # Graph Distance
                 graph_dist = np.zeros((n, n), dtype=int)
+                dist_3d = np.zeros((n,n), dtype=float)
                 for i, a1 in enumerate(atoms):
                     for j, a2 in enumerate(atoms):
                         if i == j:
                             graph_dist[i, j] = 0
+                            dist_3d[i, j] = 0
                         else:
-                            graph_dist[i, j] = MolecularDescriptors.atom_distance(a1, a2)
-
-                # 3D Distance
-                coords = np.array([a.coordinates for a in atoms])
-                dist_3d = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=-1)
+                            graph_dist[i, j] = self.csdmol.shortest_path(a1, a2)
+                            dist_3d[i, j] = MolecularDescriptors.atom_distance(a1, a2)
 
                 return graph_dist, dist_3d
-            graph_dist = Chem.GetDistanceMatrix(self.rdmol).astype(int)
-            dist_3d = Chem.Get3DDistanceMatrix(self.rdmol)
-        
+            elif self.filetype != "cif":
+                graph_dist = Chem.GetDistanceMatrix(self.rdmol).astype(int)
+                dist_3d = Chem.Get3DDistanceMatrix(self.rdmol)
+            
             return graph_dist, dist_3d
         except Exception as e:
             logger.error(f"Fail to get the path length matrix and 3D distance matrix for molecule {self.id}")
@@ -405,6 +405,7 @@ class EMS(object):
                 tmp_types.append(targetflag)
             cpl_types.append(tmp_types)
 
+
         self.pair_properties["nmr_types"] = np.array(cpl_types, dtype=str)
 
 
@@ -419,9 +420,13 @@ class EMS(object):
         - Gaussian_prefs (dict): The parameters for Gaussian calculation.
         - SDFversion (str): The version of the SDF file to write (default is "V3000").
         '''
-
         # Deep copy the rdmol object
+        # if self.filetype == "cif":
+        #    csdmol = copy.deepcopy(self.csdmol)
+        # elif self.filetype != "cif":
         rdmol = copy.deepcopy(self.rdmol)
+
+        
 
         # Prepare the file information, which is our repository and lab information
         # This can be saved as the _MolFileInfo property of the RDKit molecule to write to the second line of the SDF file.
@@ -429,20 +434,23 @@ class EMS(object):
 
         # Prepare the file comments, which can be saved as the _MolFileComments property of the RDKit molecule to write to the third line of the SDF file.
         MolFileComments = FileComments
+        if self.filetype == "cif":
+            block = csdmol_to_sdf_block(self.csdmol, FileInfo=MolFileInfo, FileComment=MolFileComments)
 
-        # Write the file block string
-        if file_type == 'sdf':
-            block = rdmol_to_sdf_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments, SDFversion=SDFversion)
-        
-        elif file_type == 'xyz':
-            block = rdmol_to_xyz_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments)
-        
-        elif file_type == 'gaussian_com':
-            block = write_gaussian_com_block(self, prefs=Gaussian_prefs)
+        elif self.filetype != "cif":
+            # Write the file block string
+            if file_type == 'sdf':
+                block = rdmol_to_sdf_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments, SDFversion=SDFversion)
+            
+            elif file_type == 'xyz':
+                block = rdmol_to_xyz_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments)
+            
+            elif file_type == 'gaussian_com':
+                block = write_gaussian_com_block(self, prefs=Gaussian_prefs)
 
-        else:
-            logger.error(f"Unsupported file type: {file_type}")
-            raise ValueError(f"Unsupported file type: {file_type}")
+            else:
+                logger.error(f"Unsupported file type: {file_type}")
+                raise ValueError(f"Unsupported file type: {file_type}")
 
         # Write the file block to the output file
         if outfile is None or outfile.strip() == "":
