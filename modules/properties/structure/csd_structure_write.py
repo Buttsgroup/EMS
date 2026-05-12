@@ -102,6 +102,7 @@ def csdmol_to_sdf_block(ccdc_mol, FileInfo=None, FileComment=None):
     # Set the SDF file version according to the atom number of the RDKit molecule
     atoms = ccdc_mol.atoms
     n_atoms = len(atoms)
+    
 
     # if SDFversion == "V2000" and n_atoms > 999:
     #     logger.warning(f"V2000 cannot be used for molecules with more than 999 atoms. SDF version is set to V3000.")
