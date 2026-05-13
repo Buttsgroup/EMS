@@ -10,7 +10,7 @@ from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_sdf_
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_aromatic_bond_array
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_xyz_block
 from EMS.modules.properties.file_io import file_to_rdmol, file_to_csdmol
-from EMS.modules.properties.file_io import nmr_to_rdmol, nmr_to_csdmol, xrd_to_csdmol
+from EMS.modules.properties.file_io import nmr_to_rdmol, nmr_to_csdmol, xrd_to_csdmol, ir_to_csdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
 from EMS.modules.properties.XRD.xrd_write import xray_to_sdf_block
@@ -80,6 +80,7 @@ class EMS(object):
         mol_id=None,                # Customized molecule ID
         nmr=False,                  # Whether to read NMR data
         xrd = False,                # Whether to read XRD data
+        ir = False,                 # Whether to read IR data
         streamlit=False,            # Streamlit mode is used to read the file from website
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
@@ -115,6 +116,7 @@ class EMS(object):
         self.symmetric = None              # A string among 'sym', 'asym' and 'error' to indicate whether the non-hydrogen backbone of the molecule is symmetric
         self.nmr = nmr                     # Whether to read NMR data
         self.xrd = xrd                     # Whether to read XRD data
+        self.ir = ir                       # Whether to read IR data
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
@@ -227,6 +229,10 @@ class EMS(object):
             # Read XRD data and assign to self.mol_properties
             if self.filetype == "cif":
                 xrd_to_csdmol(self, self.file)
+            # Read IR data and assign to self.mol_properties
+        elif self.ir:
+            if self.filetype == "cif":
+                ir_to_csdmol(self,self.file)
 
             # Add molecular properties in SDF format to csdmol properties
 

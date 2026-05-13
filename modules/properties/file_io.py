@@ -19,6 +19,7 @@ from EMS.modules.properties.nmr.nmr_read import nmr_read_df
 from EMS.modules.properties.nmr.nmr_read import nmr_read_gaussian
 from EMS.modules.properties.nmr.nmr_read import nmr_read_cif
 from EMS.modules.properties.XRD.xrd_read import xrd_read_cif
+from EMS.modules.properties.IR.ir_read import ir_read_cif
 from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
@@ -475,3 +476,13 @@ def xrd_to_csdmol(ems, cif=None):
     # Handle XRD data
     ems.mol_properties["q_val"] = q_vals
     ems.mol_properties["intensity"] = intensities
+
+def ir_to_csdmol(ems, cif=None):
+    if cif is None:
+        raise ValueError("cif_file is required for ir_to_csdmol")
+    try:
+        wavenumber, intensities = ir_read_cif(cif)
+    except Exception as e:
+        mol_id = getattr(ems.csd_filename, "identifier", None)
+        logger.error(f'Fail to read XRD data for molecule {mol_id} from .cif file {cif}')
+        raise e
