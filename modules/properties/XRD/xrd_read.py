@@ -26,8 +26,8 @@ def xrd_read_cif(cif):
     with open(cif) as f:
         lines = f.readlines()
 
-    q_values = []
-    intensities = []
+    q_values_xray = []
+    intensity_xray = []
 
     start = False
     for line in lines:
@@ -42,12 +42,12 @@ def xrd_read_cif(cif):
             parts = line.split()
             if len(parts) == 2:
                 try:
-                    q_values.append(float(parts[0]))
-                    intensities.append(float(parts[1]))
+                    q_values_xray.append(float(parts[0]))
+                    intensity_xray.append(float(parts[1]))
                 except ValueError:
                     continue
 
-    return q_values, intensities
+    return q_values_xray, intensity_xray
 
 
 

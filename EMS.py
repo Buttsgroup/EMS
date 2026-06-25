@@ -230,9 +230,9 @@ class EMS(object):
             if self.filetype == "cif":
                 xrd_to_csdmol(self, self.file)
             # Read IR data and assign to self.mol_properties
-        elif self.ir:
+        if self.ir:
             if self.filetype == "cif":
-                ir_to_csdmol(self,self.file)
+                ir_to_csdmol(self, self.file)
 
             # Add molecular properties in SDF format to csdmol properties
 

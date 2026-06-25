@@ -23,8 +23,8 @@ def ir_read_cif(cif):
     with open(cif) as f:
         lines = f.readlines()
 
-    wavenumber = []
-    intensities = []
+    wavenumber_ir = []
+    intensity_ir = []
 
     start = False
     for line in lines:
@@ -39,9 +39,9 @@ def ir_read_cif(cif):
             parts = line.split()
             if len(parts) == 2:
                 try:
-                    wavenumber.append(float(parts[0]))
-                    intensities.append(float(parts[1]))
+                    wavenumber_ir.append(float(parts[0]))
+                    intensity_ir.append(float(parts[1]))
                 except ValueError:
                     continue
                 
-    return wavenumber, intensities
+    return wavenumber_ir, intensity_ir

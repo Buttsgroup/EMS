@@ -467,22 +467,26 @@ def xrd_to_csdmol(ems, cif=None):
     if cif is None:
         raise ValueError("cif_file is required for xrd_to_csdmol")
     try:
-        q_vals, intensities = xrd_read_cif(cif)
+        q_vals_xray, intensity_xray = xrd_read_cif(cif)
     except Exception as e:
         mol_id = getattr(ems.csd_filename, "identifier", None)
         logger.error(f'Fail to read XRD data for molecule {mol_id} from .cif file {cif}')
         raise e 
     
     # Handle XRD data
-    ems.mol_properties["q_val"] = q_vals
-    ems.mol_properties["intensity"] = intensities
+    ems.mol_properties["q_vals_xray"] = q_vals_xray
+    ems.mol_properties["intensity_xray"] = intensity_xray
 
 def ir_to_csdmol(ems, cif=None):
     if cif is None:
         raise ValueError("cif_file is required for ir_to_csdmol")
     try:
-        wavenumber, intensities = ir_read_cif(cif)
+        wavenumber_ir, intensity_ir = ir_read_cif(cif)
     except Exception as e:
         mol_id = getattr(ems.csd_filename, "identifier", None)
         logger.error(f'Fail to read XRD data for molecule {mol_id} from .cif file {cif}')
         raise e
+    
+    # Handle IR data
+    ems.mol_properties["wavenumber_ir"] = wavenumber_ir
+    ems.mol_properties["intensity_ir"] = intensity_ir
