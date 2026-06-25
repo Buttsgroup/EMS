@@ -5,19 +5,25 @@ import sys
 from datetime import date
 
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_structure_arrays
+from EMS.modules.properties.structure.csd_structure_write import csdmol_to_structure_arrays, csdmol_to_sdf_block
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_sdf_block
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_aromatic_bond_array
 from EMS.modules.properties.structure.rdkit_structure_write import rdmol_to_xyz_block
-from EMS.modules.properties.file_io import file_to_rdmol
-from EMS.modules.properties.file_io import nmr_to_rdmol
+from EMS.modules.properties.file_io import file_to_rdmol, file_to_csdmol
+from EMS.modules.properties.file_io import nmr_to_rdmol, nmr_to_csdmol, xrd_to_csdmol, ir_to_csdmol
 from EMS.utils.periodic_table import Get_periodic_table
 from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
+from EMS.modules.properties.XRD.xrd_write import xray_to_sdf_block
 from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_block
 from EMS.modules.conformer.EMSconf import EMSconf
+
+# from EMS.modules.conformer.EMSconf import EMSconf
 
 from rdkit import Chem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
+from ccdc.molecule import Molecule
+from ccdc.descriptors import MolecularDescriptors
 
 
 ########### Set up the logger system ###########
@@ -73,6 +79,8 @@ class EMS(object):
         file,                       # The file to read
         mol_id=None,                # Customized molecule ID
         nmr=False,                  # Whether to read NMR data
+        xrd = False,                # Whether to read XRD data
+        ir = False,                 # Whether to read IR data
         streamlit=False,            # Streamlit mode is used to read the file from website
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
@@ -80,15 +88,17 @@ class EMS(object):
     ):
 
 
-        # Initialize the attributes to save the file, the file type and the RDKit molecule object
+        # Initialize the attributes to save the file, the file type and the RDKit molecule object or the CSD molecule object
         self.file = file                   # The file to read
         self.filetype = None               # The file type of the file to read
         self.rdmol = None                  # The rdkit molecule object that will be generated from the file
+        self.csdmol = None                 # The csd molecule object that will be generated from the file
         self.streamlit = streamlit         # Streamlit mode is used to read the file from website
 
         # Initialize the attributes to save the molecule id and the official filename
         self.id = mol_id                   # The customized molecule id
         self.filename = None               # The official name of the file to read
+        self.csd_filename = None
 
         # Initialize the molecular structure and properties as empty
         self.type = None                   # The atomic numbers of the atoms in the molecule. Shape: (n_atoms,)
@@ -105,67 +115,89 @@ class EMS(object):
         self.pass_valence_check = None     # Whether the molecule has correct valence
         self.symmetric = None              # A string among 'sym', 'asym' and 'error' to indicate whether the non-hydrogen backbone of the molecule is symmetric
         self.nmr = nmr                     # Whether to read NMR data
+        self.xrd = xrd                     # Whether to read XRD data
+        self.ir = ir                       # Whether to read IR data
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
 
 
         # Achieve the filetype, RDKit molecule object and its filename
+        # Achieve the filetype, CSD molecule object and its filename
         # The filename is the official name of the file to read.
         # Details of the definition of filename for different file types are in EMS.modules.properties.file_io
-        self.filetype, self.filename, self.rdmol = file_to_rdmol(self.file, mol_id=self.id, streamlit=self.streamlit)
+       
+        self.filetype, self.csd_filename, self.csdmol = file_to_csdmol(self.file, mol_id=self.csd_filename)
+        if self.filetype != "cif":
+            self.filetype, self.filename, self.rdmol = file_to_rdmol(self.file, mol_id=self.id, streamlit=self.streamlit)
+        else:
+            self.filename = self.csd_filename
+            self.rdmol = None
 
         # Assign the official name (filename) of the file to read to self.id if self.id is None
         if self.id is None or self.id == "":
             self.id = self.filename
 
         # Check if self.rdmol is read correctly from the file as an rdkit molecule object
-        if not isinstance(self.rdmol, Chem.rdchem.Mol):
-            logger.error(f"Fail to read RDKit molecule from {self.id}")
-            raise TypeError(f"Fail to read RDKit molecule from {self.id}")
+        if self.filetype != "cif":
+            if not isinstance(self.rdmol, Chem.rdchem.Mol):
+                logger.error(f"Fail to read RDKit molecule from {self.id}")
+                raise TypeError(f"Fail to read RDKit molecule from {self.id}")
         
         
-        # Add hydrogens to the rdkit molecule object
-        if addHs:
-            try:
-                self.rdmol = Chem.AddHs(self.rdmol)
-            except Exception as e:
-                logger.error(f"Fail to add hydrogens to the rdkit molecule object: {self.id}")
-                raise e
+            # Add hydrogens to the rdkit molecule object
+            if addHs:
+                try:
+                    self.rdmol = Chem.AddHs(self.rdmol)
+                except Exception as e:
+                    logger.error(f"Fail to add hydrogens to the rdkit molecule object: {self.id}")
+                    raise e
 
-        # Sanitize the rdkit molecule object
-        if self.sanitize:
-            try:
-                Chem.SanitizeMol(self.rdmol)
-            except Exception as e:
-                logger.error(f"Fail to sanitize the rdkit molecule object: {self.id}")
-                raise e
-        
-        # Kekulize the rdkit molecule object
-        if self.kekulize:
-            try:
-                Chem.Kekulize(self.rdmol)
-            except Exception as e:
-                logger.error(f"Fail to kekulize the rdkit molecule object: {self.id}")
-                raise e
+            # Sanitize the rdkit molecule object
+            if self.sanitize:
+                try:
+                    Chem.SanitizeMol(self.rdmol)
+                except Exception as e:
+                    logger.error(f"Fail to sanitize the rdkit molecule object: {self.id}")
+                    raise e
+            
+            # Kekulize the rdkit molecule object
+            if self.kekulize:
+                try:
+                    Chem.Kekulize(self.rdmol)
+                except Exception as e:
+                    logger.error(f"Fail to kekulize the rdkit molecule object: {self.id}")
+                    raise e
 
         # Get the molecular structures
-        self.type, self.xyz, self.conn = rdmol_to_structure_arrays(self.rdmol)
-        self.aromatic_conn = rdmol_to_aromatic_bond_array(self.rdmol)
-        self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
+        if self.filetype == "cif":
+            self.type, self.xyz, self.conn = csdmol_to_structure_arrays(self.csdmol)
+            self.mol_properties["SMILES"] = self.csdmol.smiles
+            self.adj = None
+        else:
+            self.type, self.xyz, self.conn = rdmol_to_structure_arrays(self.rdmol)
+            self.aromatic_conn = rdmol_to_aromatic_bond_array(self.rdmol)
+            self.adj = Chem.GetAdjacencyMatrix(self.rdmol) 
+            self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
+            self.flat = self.check_Zcoords_zero() 
         self.path_topology, self.path_distance = self.get_graph_distance()
-        self.mol_properties["SMILES"] = Chem.MolToSmiles(self.rdmol)
-        self.flat = self.check_Zcoords_zero() 
+        self.flat = self.check_Zcoords_zero()
+
 
         # Check if every atom in the molecule has a correct valence
         # If any atom in the molecule has a wrong implicit valence or there is any error when calling the self.check_valence() function,
         # self.pass_valence_check will be set to False
-        self.pass_valence_check = self.check_valence()
+        if self.filetype != "cif":
+            self.pass_valence_check = self.check_valence()
         
         # Check if the non-hydrogen backbone of the molecule is symmetric
         # If there is any error when calling the self.check_symmetric() function, self.symmetric will be set to 'Error'
         # The error may be caused by wrong explicit valences which are greater than permitted
-        self.symmetric = self.check_symmetric()
+            self.symmetric = self.check_symmetric()
+
+        elif self.filetype == 'cif':
+            self.pass_valence_check = None
+            self.symmetric = None
         
         # Generate self.pair_properties["nmr_types"] according to the path topology of self.rdmol
         self.get_coupling_types() 
@@ -173,9 +205,13 @@ class EMS(object):
         # Get NMR properties
         if self.nmr:      
             # Read NMR data and assign to self.atom_properties and self.pair_properties
-            nmr_to_rdmol(self)
+            if self.filetype != "cif":
+                nmr_to_rdmol(self)
+            else:
+                nmr_to_csdmol(self, self.file)
 
             # Check if the length of the shift array is equal to the number of atoms in the molecule
+        if self.filetype != "cif":
             if len(self.atom_properties["shift"]) != len(self.type):
                 logger.error(f'Fail to correctly read NMR data for molecule {self.id}')
                 raise ValueError(f'Fail to correctly read NMR data for molecule {self.id}')
@@ -187,6 +223,18 @@ class EMS(object):
                 self.rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
             if not "NMREDATA_J" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_J", pair_lines)
+
+        # Get molecule properties
+        if self.xrd:
+            # Read XRD data and assign to self.mol_properties
+            if self.filetype == "cif":
+                xrd_to_csdmol(self, self.file)
+            # Read IR data and assign to self.mol_properties
+        if self.ir:
+            if self.filetype == "cif":
+                ir_to_csdmol(self, self.file)
+
+            # Add molecular properties in SDF format to csdmol properties
 
 
     def __str__(self):
@@ -205,6 +253,7 @@ class EMS(object):
             f"Path distance: \n {self.path_distance}, \n"
             f"Atom properties: \n {self.atom_properties}, \n"
             f"Pair properties: \n {self.pair_properties}, \n"
+            f"Molecule properties \n {self.mol_properties} \n"
             f")"
         )
 
@@ -299,13 +348,32 @@ class EMS(object):
         The path length matrix is the shortest path length between atoms. Shape: (n_atoms, n_atoms)
         The 3D distance matrix is the 3D distance between atoms. Shape: (n_atoms, n_atoms)
         """
-        
         try:
-            return Chem.GetDistanceMatrix(self.rdmol).astype(int), Chem.Get3DDistanceMatrix(self.rdmol)
+            if self.filetype == 'cif':
+                atoms = list(self.csdmol.atoms)
+                n = len(atoms)
+
+                # Graph Distance
+                graph_dist = np.zeros((n, n), dtype=int)
+                dist_3d = np.zeros((n,n), dtype=float)
+                for i, a1 in enumerate(atoms):
+                    for j, a2 in enumerate(atoms):
+                        if i == j:
+                            graph_dist[i, j] = 0
+                            dist_3d[i, j] = 0
+                        else:
+                            graph_dist[i, j] = self.csdmol.shortest_path(a1, a2)
+                            dist_3d[i, j] = MolecularDescriptors.atom_distance(a1, a2)
+
+                return graph_dist, dist_3d
+            elif self.filetype != "cif":
+                graph_dist = Chem.GetDistanceMatrix(self.rdmol).astype(int)
+                dist_3d = Chem.Get3DDistanceMatrix(self.rdmol)
+            
+            return graph_dist, dist_3d
         except Exception as e:
             logger.error(f"Fail to get the path length matrix and 3D distance matrix for molecule {self.id}")
             raise e
-
 
     def get_coupling_types(self) -> None:
         """
@@ -343,6 +411,7 @@ class EMS(object):
                 tmp_types.append(targetflag)
             cpl_types.append(tmp_types)
 
+
         self.pair_properties["nmr_types"] = np.array(cpl_types, dtype=str)
 
 
@@ -357,9 +426,13 @@ class EMS(object):
         - Gaussian_prefs (dict): The parameters for Gaussian calculation.
         - SDFversion (str): The version of the SDF file to write (default is "V3000").
         '''
-
         # Deep copy the rdmol object
+        # if self.filetype == "cif":
+        #    csdmol = copy.deepcopy(self.csdmol)
+        # elif self.filetype != "cif":
         rdmol = copy.deepcopy(self.rdmol)
+
+        
 
         # Prepare the file information, which is our repository and lab information
         # This can be saved as the _MolFileInfo property of the RDKit molecule to write to the second line of the SDF file.
@@ -367,20 +440,23 @@ class EMS(object):
 
         # Prepare the file comments, which can be saved as the _MolFileComments property of the RDKit molecule to write to the third line of the SDF file.
         MolFileComments = FileComments
+        if self.filetype == "cif":
+            block = csdmol_to_sdf_block(self.csdmol, FileInfo=MolFileInfo, FileComment=MolFileComments)
 
-        # Write the file block string
-        if file_type == 'sdf':
-            block = rdmol_to_sdf_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments, SDFversion=SDFversion)
-        
-        elif file_type == 'xyz':
-            block = rdmol_to_xyz_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments)
-        
-        elif file_type == 'gaussian_com':
-            block = write_gaussian_com_block(self, prefs=Gaussian_prefs)
+        elif self.filetype != "cif":
+            # Write the file block string
+            if file_type == 'sdf':
+                block = rdmol_to_sdf_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments, SDFversion=SDFversion)
+            
+            elif file_type == 'xyz':
+                block = rdmol_to_xyz_block(rdmol, FileInfo=MolFileInfo, FileComment=MolFileComments)
+            
+            elif file_type == 'gaussian_com':
+                block = write_gaussian_com_block(self, prefs=Gaussian_prefs)
 
-        else:
-            logger.error(f"Unsupported file type: {file_type}")
-            raise ValueError(f"Unsupported file type: {file_type}")
+            else:
+                logger.error(f"Unsupported file type: {file_type}")
+                raise ValueError(f"Unsupported file type: {file_type}")
 
         # Write the file block to the output file
         if outfile is None or outfile.strip() == "":

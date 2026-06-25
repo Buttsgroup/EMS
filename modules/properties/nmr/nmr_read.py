@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 import logging
+import re
 
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_nmr
 
@@ -344,65 +345,95 @@ def nmr_read_cif(file):
     '''
 
     with open(file, 'r') as f:
-        block = f.read()
-        lines = block.strip().split('\n')
+        lines = f.read().strip().splitlines()
     
     # Initialize lists to store chemical shifts and coupling constants
     shift_list = []
-    coupling_list = []
+    tensor_lines = []
+    tensor_diags = []
+    tensor_flag = False
 
-    # Initialize flags
-    shift_flag = False
-    coupling_flag = False
-
-    # Initialize the methods to read NMR data from .cif file
-    shift_method = None
-    coupling_method = None
+    mode = None
 
     for line in lines:
-        # Check for the start of chemical shift data block
-        if 'shiftml' in line.lower() and 'cs' in line.lower():
-            shift_flag = True
-            coupling_flag = False
-            shift_method = 'shiftml'
+        line_lower = line.lower()
+
+        if 'shiftml' in line_lower and 'tensor' not in line_lower:
+            mode = 'shift'
             continue
 
-        ############ This section is reserved for reading coupling constants ############
+        elif 'shiftml' in line_lower and 'tensor' in line_lower:
+            mode = 'tensor'
+            continue
 
-        ############ This section is reserved for reading coupling constants ############
-        
-        # Read chemical shift data
-        if shift_flag:
-            # ShiftML format
-            if shift_method == 'shiftml':
-                line_split = line.strip().split()
-                line_split = [item.replace('[','').replace(']','') for item in line_split if item != '[' and item != ']']
-                shift_list.extend(line_split)
-                # Stop reading when reaching the end of the block
-                if ']' in line:
-                    shift_flag = False
-                    continue
+        #### READ SHIFTS #####
+        if mode == 'shift':
+            if line.strip().startswith('_') or line.strip().startswith('loop_') or line.strip().startswith('#'):
+                mode = None
+                continue
+
+            try:
+                val = float(line.strip())
+                shift_list.append(val)
+            except ValueError:
+            # If it's not a single float, try removing brackets and parsing multiple values
+                clean = line.replace('[', '').replace(']', '').split()
+                try:
+                    shift_list.extend(float(x) for x in clean)
+                except ValueError:
+                    pass
             
-            # Raise error if the format is not recognized
-            else:
-                logger.error(f'Unrecognized chemical shift format in .cif file: {file}')
-                raise ValueError(f'Unrecognized chemical shift format in .cif file: {file}')
-            
-        ############ This section is reserved for reading coupling constants ############
+            #### READ TENSORS ###
+        elif mode == 'tensor':
+                if line.strip().startswith('[['):
+                    tensor_flag = True
+                    tensor_lines = [line]
+                elif tensor_flag:
+                    tensor_lines.append(line)
+                    if ']]' in line:
+                        block = ''.join(tensor_lines)
+                        
+                        vals = re.findall(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?', block)
+                        vals = list(map(float, vals))
 
-        ############ This section is reserved for reading coupling constants ############
+                        if len(vals) == 9:
+                            tensor_arr = np.array(vals).reshape(3, 3)
+                            tensor_diags.append(np.diag(tensor_arr))
+                            diags_arr = np.array(tensor_diags, dtype=np.float64)
 
-    # Convert lists to numpy arrays
-    num_atom = len(shift_list)
-    shift_array = np.array(shift_list, dtype=np.float64)
-    shift_var = np.zeros(num_atom, dtype=np.float64)
 
-    if coupling_method is None:
+                            sigma_xx = diags_arr[:, 0]
+                            sigma_yy = diags_arr[:, 1]
+                            sigma_zz = diags_arr[:, 2]
+                    
+                        tensor_flag = False
+                        tensor_lines = []
+                 
+
+    # Process results based on what was found
+    if shift_list:
+        # Shifts were found
+        shift_array = np.array(shift_list, dtype=np.float64)
+        shift_var = np.zeros_like(shift_array)
+        num_atom = len(shift_array)
         coupling_array = np.zeros((num_atom, num_atom), dtype=np.float64)
-        coupling_var = np.zeros((num_atom, num_atom), dtype=np.float64)
-    else:
-        coupling_array = np.array(coupling_list, dtype=np.float64)
-        coupling_var = np.zeros_like(coupling_array, dtype=np.float64)
+        coupling_var = np.zeros_like(coupling_array)
+        sigma_xx = sigma_yy = sigma_zz = None
     
-    return shift_array, shift_var, coupling_array, coupling_var
+    elif tensor_diags:
+        # Tensors were found
+        diags_arr = np.array(tensor_diags, dtype=np.float64)
+        sigma_xx = diags_arr[:, 0]
+        sigma_yy = diags_arr[:, 1]
+        sigma_zz = diags_arr[:, 2]
         
+        # No shifts present
+        shift_array = None
+        shift_var = None
+        coupling_array = None
+        coupling_var = None
+    
+    else:
+        raise ValueError(f"No ShiftML CS or tensor data found in {file}")
+    
+    return shift_array, shift_var, coupling_array, coupling_var, sigma_xx, sigma_yy, sigma_zz

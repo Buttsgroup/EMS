@@ -37,7 +37,11 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
             conns.append(ems.conn[t])
             smiles.append(ems.mol_properties["SMILES"])
             for p, prop in enumerate(ems.atom_properties.keys()):
-                atom_props[p].append(ems.atom_properties[prop][t])
+            # Only append if index exists
+                if t < len(ems.atom_properties[prop]):
+                    atom_props[p].append(ems.atom_properties[prop][t])
+                else:
+                    atom_props[p].append(None)
 
             # for p, prop in enumerate(ems.atom_properties.keys()):
             #     if prop == 'shift' and atom_list == 'all':
@@ -94,7 +98,7 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
         return atoms
 
 
-def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
+def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=10000):
     # construct dataframe for pairs in molecule
     # only atom pairs with bonds < max_pathlen are included
 
@@ -126,8 +130,11 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
                 atom_index_1.append(t2)
                 dist.append(ems.path_distance[t][t2])
                 path_len.append(int(ems.path_topology[t][t2]))
-                bond_existence.append(ems.adj[t][t2])
-                aromatic_bond_order.append(ems.aromatic_conn[t][t2])
+                if ems.adj is not None:
+                    bond_existence.append(ems.adj[t][t2])
+                else:
+                    bond_existence.append(1 if ems.conn[t][t2] > 0 else 0)
+                aromatic_bond_order.append(ems.aromatic_conn[t][t2] if ems.aromatic_conn is not None else ems.conn[t][t2])
                 for p, prop in enumerate(ems.pair_properties.keys()):
                         pair_props[p].append(ems.pair_properties[prop][t][t2])
 
@@ -170,3 +177,42 @@ def make_pairs_df(ems_list, write=False, format="pickle", max_pathlen=6):
             pairs.to_parquet(f"{write}/pairs.parquet")
     else:
         return pairs
+    
+def make_mol_prop_df(ems_list, write=False, format="pickle"):
+    molecule_name = []
+    mol_props = []
+    
+    prop_names = list(ems_list[0].mol_properties.keys())
+    mol_props = [[] for _ in prop_names]
+
+    pbar = tqdm(ems_list, desc="Constructing mol_prop dictionary", leave=False)
+
+    for ems in pbar:
+        molecule_name.append(ems.csd_filename)
+
+        for p, prop in enumerate(ems.mol_properties.keys()):
+            mol_props[p].append(ems.mol_properties[prop])
+        
+    pbar.close()
+
+    # construct dataframe dictionary
+    mol_prop = {"molecule_name": molecule_name}
+
+    for p, prop_name in enumerate(prop_names):
+        mol_prop[prop_name] = mol_props[p]
+    
+    mol_prop = pd.DataFrame(mol_prop)
+    mol_prop["dummy_mol"] = 0
+    mol_prop["molecule_name"] = mol_prop["molecule_name"].astype("category")
+
+    if write:
+        if format == "csv":
+            mol_prop.to_csv(f"{write}/mol_prop.csv")
+        elif format == "pickle":
+            mol_prop.to_pickle(f"{write}/mol_prop.pkl")
+        elif format == "parquet":
+            mol_prop.to_parquet(f"{write}/mol_prop.parquet")
+
+    else:
+        return mol_prop
+
