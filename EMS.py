@@ -15,6 +15,9 @@ from EMS.modules.properties.nmr.nmr_write import nmr_to_sdf_block
 from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_block
 from EMS.modules.conformer.EMSconf import EMSconf
 
+from EMS.modules.properties.file_io import high_error_carbons_to_rdmol
+from EMS.modules.properties.high_error_carbons.high_error_carbons_write import high_error_carbons_to_sdf_block
+
 from rdkit import Chem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
@@ -401,6 +404,20 @@ class EMS(object):
     def get_conformers(self, params=None):
 
         return EMSconf(self, params=params)
+    
+    def add_high_error_carbons_to_sdf(self, C_index_list):
+
+        # Get high error carbon properties
+        high_error_carbons_to_rdmol(self, C_index_list)
+
+        # Add high error carbons in SDF format to rdmol properties
+        high_error_carbon_lines = high_error_carbons_to_sdf_block(self.atom_properties)
+
+        if not "HIGH_ERROR_CARBONS" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
+            self.rdmol.SetProp("HIGH_ERROR_CARBONS", high_error_carbon_lines)
+
+        return self    
+
 
 
 
