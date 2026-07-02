@@ -20,6 +20,8 @@ from EMS.modules.properties.nmr.nmr_read import nmr_read_cif
 from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
+from EMS.modules.properties.high_error_carbons.high_error_carbons_read import high_error_carbons_read_list
+
 
 ########### Set up the logger system ###########
 logger = logging.getLogger(__name__)
@@ -423,3 +425,17 @@ def nmr_to_rdmol(rdmol):
         rdmol.pair_properties["coupling"] = coupling_array
         rdmol.pair_properties["coupling_var"] = coupling_vars
 
+def high_error_carbons_to_rdmol(rdmol, C_index_list):        
+    '''
+    This function reads list of atom indices for high error carbons and assigns them as an atom property of the EMS molecule (rdmol).
+
+    It supports reading NMR data from the following file formats:
+    (1) list
+    '''
+    try:
+        high_error_carbons = high_error_carbons_read_list(C_index_list)
+    except Exception as e:
+            logger.error(f'Fail to read high error carbon data for molecule {rdmol.id} from atom index list')
+            raise e
+    
+    rdmol.atom_properties["high_error_carbons"] = high_error_carbons
