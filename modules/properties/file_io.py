@@ -21,6 +21,7 @@ from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
 from EMS.modules.properties.high_error_carbons.high_error_carbons_read import high_error_carbons_read_list
+from EMS.modules.properties.bonding_predicted_candidates.bonding_read import predicted_candidate_read_df
 
 
 ########### Set up the logger system ###########
@@ -439,3 +440,19 @@ def high_error_carbons_to_rdmol(rdmol, C_index_list):
             raise e
     
     rdmol.atom_properties["high_error_carbons"] = high_error_carbons
+
+def bonding_pred_candidate_to_rdmol(rdmol, pred_atom_df, pred_pair_df):
+    '''
+    This function reads bonding information from the pair dataframe of predicted candidates, and assigns this information as pair properties of the EMS molecule (rdmol).
+
+    It supports reading NMR data from the following file formats:
+    (1) pair dataframe (pandas dataframe)
+    '''
+    try:
+        bond_order_matrix = predicted_candidate_read_df(rdmol.id, pred_atom_df, pred_pair_df)
+
+    except Exception as e:
+            logger.error(f'Fail to read bonding data for molecule {rdmol.id} from predicted pair dataframe')
+            raise e
+    
+    rdmol.pair_properties["bond_order"] = bond_order_matrix

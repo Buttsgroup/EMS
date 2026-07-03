@@ -16,7 +16,9 @@ from EMS.modules.comp_chem.gaussian.gaussian_input import write_gaussian_com_blo
 from EMS.modules.conformer.EMSconf import EMSconf
 
 from EMS.modules.properties.file_io import high_error_carbons_to_rdmol
+from EMS.modules.properties.file_io import bonding_pred_candidate_to_rdmol
 from EMS.modules.properties.high_error_carbons.high_error_carbons_write import high_error_carbons_to_sdf_block
+from EMS.modules.properties.bonding_predicted_candidates.bonding_write import bonding_pred_candidate_to_sdf_block
 
 from rdkit import Chem
 from rdkit.Chem import rdmolops
@@ -416,8 +418,20 @@ class EMS(object):
         if not "HIGH_ERROR_CARBONS" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
             self.rdmol.SetProp("HIGH_ERROR_CARBONS", high_error_carbon_lines)
 
-        return self    
+        return self
 
+    def add_bonding_predicted_candidates_to_sdf(self, pred_atom_df, pred_pair_df):  
+
+        # Get bonding information from the predicted candidate pair dataframe and assign to rdmol pair properties 
+        bonding_pred_candidate_to_rdmol(self, pred_atom_df, pred_pair_df) 
+
+        # Add bonding information in SDF format to rdmol properties
+        bonding_pred_candidate_block = bonding_pred_candidate_to_sdf_block(self.type, self.pair_properties)
+
+        if not "BONDING_PREDICTED_CANDIDATE" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
+            self.rdmol.SetProp("BONDING_PREDICTED_CANDIDATE", bonding_pred_candidate_block)
+        
+        return self
 
 
 
