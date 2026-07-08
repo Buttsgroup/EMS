@@ -407,16 +407,16 @@ class EMS(object):
 
         return EMSconf(self, params=params)
     
-    def add_high_error_carbons_to_sdf(self, C_index_list):
+    def add_high_error_carbons_to_sdf(self, C_index_list, shift_C_idx_list, shift_error_C_idx_list):
 
         # Get high error carbon properties
-        high_error_carbons_to_rdmol(self, C_index_list)
+        high_error_carbons_to_rdmol(self, C_index_list, shift_C_idx_list, shift_error_C_idx_list)
 
         # Add high error carbons in SDF format to rdmol properties
-        high_error_carbon_lines = high_error_carbons_to_sdf_block(self.atom_properties)
+        high_error_carbon_block = high_error_carbons_to_sdf_block(self.atom_properties)
 
         if not "HIGH_ERROR_CARBONS" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
-            self.rdmol.SetProp("HIGH_ERROR_CARBONS", high_error_carbon_lines)
+            self.rdmol.SetProp("HIGH_ERROR_CARBONS", high_error_carbon_block)
 
         return self
 
