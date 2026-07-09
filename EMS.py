@@ -83,7 +83,8 @@ class EMS(object):
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
         kekulize=True,              # Whether to kekulize the rdkit molecule object
-        high_error_carbons=False    # Whether to read high error carbons properties (predicted shift and shift error for all carbon atoms)
+        high_error_carbons=False,    # Whether to read high error carbons properties (predicted shift and shift error for all carbon atoms)
+        bonding_predicted_candidate=False  # Whether to read bonding properties of previous predicted candidate (bond order for all atom pairs in candidate)
     ):
 
 
@@ -116,6 +117,7 @@ class EMS(object):
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
         self.high_error_carbons = high_error_carbons     # Whether to read high error carbons properties (predicted shift and shift error for all carbon atoms)
+        self.bonding_predicted_candidate = bonding_predicted_candidate    # Whether to read bonding properties of previous predicted candidate (bond order for all atom pairs in candidate)
 
 
         # Achieve the filetype, RDKit molecule object and its filename
@@ -201,6 +203,10 @@ class EMS(object):
             # Read high error carbon data and assign to self.atom_properties 
             high_error_carbons_to_rdmol(self)
 
+        # Get bonding predicted candidate properties if desired
+        if self.bonding_predicted_candidate:
+            # Read bond order data of predicted candidate and assign to self.atom_properties 
+            bonding_pred_candidate_to_rdmol(self)
 
     def __str__(self):
         return f"EMS({self.id}), {self.mol_properties['SMILES']}"

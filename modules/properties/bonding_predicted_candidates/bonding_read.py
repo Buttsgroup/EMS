@@ -56,4 +56,44 @@ def predicted_candidate_read_df(mol_name, pred_atom_df, pred_pair_df):
     # Return the bonding data of the predicted candidate
     return bond_order_matrix
 
+def predicted_candidate_read_rdmol(rdmol, mol_id, atom_types):
+    '''
+    This function is used to read bond order data of a predicted candidate molecule from an RDKit molecule object.
+
+    Args:
+    - rdmol (rdkit.Chem.rdchem.Mol): RDKit molecule object.
+    - mol_id (str): Molecule ID.
+    '''
+
+    # Get all the properties of the RDKit molecule object
+    prop_dict = rdmol.GetPropsAsDict()
+
+    # Get the bonding data of the predicted candidate (BONDING_PREDICTED_CANDIDATE) from the rdkit molecule properties
+    try:
+        bonding_predicted_candidate = prop_dict['BONDING_PREDICTED_CANDIDATE']
+    except Exception as e:
+        logger.error(f'No predicted candidate bonding data found for molecule {mol_id}')
+        raise ValueError(f'No predicted candidate bonding data found for molecule {mol_id}')
+    
+    # Split the bonding predicted candidate data block into lines and then into items
+    bonding_predicted_candidate_items = []
+    for line in bonding_predicted_candidate.split('\n'):
+        if line:
+            bonding_predicted_candidate_items.append(line.split())
+    
+    # Initialize arrays for saving bonding data of predicted candidate
+    num_atom = len(atom_types)
+    bond_order_matrix = np.zeros((num_atom, num_atom), dtype=np.int32)
+
+    # Read the bonding data from the lines
+    # bonding predicted candidate row looks like this
+    # 0         , 1         , 2 
+    first_atom_index = 0
+    for item in bonding_predicted_candidate_items:
+        bond_order_matrix[int(item[0]) - first_atom_index][int(item[2]) - first_atom_index] = int(item[4])
+        bond_order_matrix[int(item[2]) - first_atom_index][int(item[0]) - first_atom_index] = int(item[4])
+    
+    # Return the bonding data of the predicted candidate
+    return bond_order_matrix
+
 

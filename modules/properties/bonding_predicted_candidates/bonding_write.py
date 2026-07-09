@@ -22,14 +22,14 @@ def bonding_pred_candidate_to_sdf_block(atom_types, pair_properties):
 
     bonding_lines = []
 
-    if 'bond_order' not in pair_properties:
+    if 'bond_order_predicted_candidate' not in pair_properties:
         logger.warning('Bond order property not found in pair properties when writing to SDF block')
 
     else:
         num_atoms = len(atom_types)
         for i in range(num_atoms):
             for j in range(i + 1, num_atoms):  # avoid duplicate and self-pairs
-                bonding = pair_properties['bond_order'][i][j]
+                bonding = pair_properties['bond_order_predicted_candidate'][i][j]
                 if bonding == 0:
                     continue
                 line = f"{i:<10d}, {j:<10d}, {bonding:<10d}"

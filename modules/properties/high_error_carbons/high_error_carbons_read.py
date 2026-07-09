@@ -45,7 +45,7 @@ def high_error_carbons_read_rdmol(rdmol, mol_id):
     # Get all the properties of the RDKit molecule object
     prop_dict = rdmol.GetPropsAsDict()
 
-    # Get the high error carbon data (HIGH_ERROR_CARBONS) from the atom properties
+    # Get the high error carbon data (HIGH_ERROR_CARBONS) from the rdkit molecule properties
     try:
         high_error_carbons = prop_dict['HIGH_ERROR_CARBONS']
     except Exception as e:

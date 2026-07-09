@@ -21,7 +21,7 @@ from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
 from EMS.modules.properties.high_error_carbons.high_error_carbons_read import high_error_carbons_read_list,  high_error_carbons_read_rdmol
-from EMS.modules.properties.bonding_predicted_candidates.bonding_read import predicted_candidate_read_df
+from EMS.modules.properties.bonding_predicted_candidates.bonding_read import predicted_candidate_read_df, predicted_candidate_read_rdmol
 
 
 ########### Set up the logger system ###########
@@ -457,18 +457,31 @@ def high_error_carbons_to_rdmol(rdmol, C_index_list=None, shift_C_idx_list=None,
     rdmol.atom_properties["shift_high_error_carbons"] = shift_high_error_carbons
     rdmol.atom_properties["shift_error_high_error_carbons"] = shift_error_high_error_carbons
 
-def bonding_pred_candidate_to_rdmol(rdmol, pred_atom_df, pred_pair_df):
+def bonding_pred_candidate_to_rdmol(rdmol, pred_atom_df=None, pred_pair_df=None):
     '''
-    This function reads bonding information from the pair dataframe of predicted candidates, and assigns this information as pair properties of the EMS molecule (rdmol).
+    This function reads bonding information (bond order) of predicted candidates, and assigns this information as pair properties of the EMS molecule (rdmol).
 
     It supports reading NMR data from the following file formats:
-    (1) pair dataframe (pandas dataframe)
+    (1) external atom and pair dataframes (pandas dataframe)
+    (2) RDKit molecule object (rdkit.Chem.rdchem.Mol)
     '''
-    try:
-        bond_order_matrix = predicted_candidate_read_df(rdmol.id, pred_atom_df, pred_pair_df)
+    if pred_atom_df is not None and pred_pair_df is not None:
+        try:
+            bond_order_matrix = predicted_candidate_read_df(rdmol.id, pred_atom_df, pred_pair_df)
+        except Exception as e:
+                logger.error(f'Fail to read bonding data for molecule {rdmol.id} from predicted atom and pair dataframes')
+                raise e
+        
+    elif rdmol.filetype == "rdmol":
+        try:
+            bond_order_matrix = predicted_candidate_read_rdmol(rdmol.rdmol, rdmol.id, rdmol.type)
+        except Exception as e:
+                logger.error(f'Fail to read bonding data for molecule {rdmol.id} from rdkit molecule object')
+                raise e
 
-    except Exception as e:
-            logger.error(f'Fail to read bonding data for molecule {rdmol.id} from predicted pair dataframe')
-            raise e
+    # Raise error if the file type is not among the above and no external bonding data of a predicted candidate is provided
+    else:
+        logger.error(f'File {rdmol.id} with file type {rdmol.filetype} is not supported for reading predicted candidate bonding data')
+        raise ValueError(f'File {rdmol.id} with file type {rdmol.filetype} is not supported for reading predicted candidate bonding data')
     
-    rdmol.pair_properties["bond_order"] = bond_order_matrix
+    rdmol.pair_properties["bond_order_predicted_candidate"] = bond_order_matrix
