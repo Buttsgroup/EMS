@@ -71,6 +71,7 @@ class EMS(object):
     - sanitize (bool): Whether to sanitize the rdkit molecule object. Default: False.
         If you are reading NMR data, sanitize should be set to False.
     - kekulize (bool): Whether to kekulize the rdkit molecule object. Default: True.
+    - high_error_carbons (bool): Whether to read high error carbons properties (predicted shift and shift error for all carbon atoms). Default: False.
     """
 
     def __init__(
@@ -81,7 +82,8 @@ class EMS(object):
         streamlit=False,            # Streamlit mode is used to read the file from website
         addHs=False,                # Whether to add hydrogens to the rdkit molecule object
         sanitize=False,             # Whether to sanitize the rdkit molecule object
-        kekulize=True               # Whether to kekulize the rdkit molecule object
+        kekulize=True,              # Whether to kekulize the rdkit molecule object
+        high_error_carbons=False    # Whether to read high error carbons properties (predicted shift and shift error for all carbon atoms)
     ):
 
 
@@ -113,6 +115,7 @@ class EMS(object):
         self.addHs = addHs                 # Whether to add hydrogens to the rdkit molecule object
         self.sanitize = sanitize           # Whether to sanitize the rdkit molecule object
         self.kekulize = kekulize           # Whether to kekulize the rdkit molecule object
+        self.high_error_carbons = high_error_carbons     # Whether to read high error carbons properties (predicted shift and shift error for all carbon atoms)
 
 
         # Achieve the filetype, RDKit molecule object and its filename
@@ -192,6 +195,11 @@ class EMS(object):
                 self.rdmol.SetProp("NMREDATA_ASSIGNMENT", atom_lines)
             if not "NMREDATA_J" in self.rdmol.GetPropNames(includePrivate=True, includeComputed=True):
                 self.rdmol.SetProp("NMREDATA_J", pair_lines)
+
+        # Get high error carbons properties if desired
+        if self.high_error_carbons:
+            # Read high error carbon data and assign to self.atom_properties 
+            high_error_carbons_to_rdmol(self)
 
 
     def __str__(self):

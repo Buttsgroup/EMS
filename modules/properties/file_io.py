@@ -20,7 +20,7 @@ from EMS.modules.properties.nmr.nmr_read import nmr_read_cif
 from EMS.modules.properties.nmr.nmr_ops import scale_chemical_shifts
 from EMS.modules.comp_chem.gaussian.gaussian_read import gaussian_read_structure
 
-from EMS.modules.properties.high_error_carbons.high_error_carbons_read import high_error_carbons_read_list
+from EMS.modules.properties.high_error_carbons.high_error_carbons_read import high_error_carbons_read_list,  high_error_carbons_read_rdmol
 from EMS.modules.properties.bonding_predicted_candidates.bonding_read import predicted_candidate_read_df
 
 
@@ -426,18 +426,32 @@ def nmr_to_rdmol(rdmol):
         rdmol.pair_properties["coupling"] = coupling_array
         rdmol.pair_properties["coupling_var"] = coupling_vars
 
-def high_error_carbons_to_rdmol(rdmol, C_index_list, shift_C_idx_list, shift_error_C_idx_list):        
+def high_error_carbons_to_rdmol(rdmol, C_index_list=None, shift_C_idx_list=None, shift_error_C_idx_list=None):        
     '''
-    This function reads lists of atom indices for high error carbons and their chemical shifts, and assigns them as atom properties of the EMS molecule (rdmol).
+    This function reads lists of the atom indices of all carbons in a molecule, their predicted chemical shifts and shift errors, and assigns them as atom properties of the EMS molecule (rdmol).
 
     It supports reading NMR data from the following file formats:
-    (1) list
+    (1) external lists of carbon atom indexes, predicted shift and predicted shift error (list)
+    (2) RDKit molecule object (rdkit.Chem.rdchem.Mol)
     '''
-    try:
-        high_error_carbons, shift_high_error_carbons, shift_error_high_error_carbons = high_error_carbons_read_list(C_index_list, shift_C_idx_list, shift_error_C_idx_list)
-    except Exception as e:
-            logger.error(f'Fail to read high error carbon data for molecule {rdmol.id} from atom index list')
+    if C_index_list is not None and shift_C_idx_list is not None and shift_error_C_idx_list is not None:
+        try:
+            high_error_carbons, shift_high_error_carbons, shift_error_high_error_carbons = high_error_carbons_read_list(C_index_list, shift_C_idx_list, shift_error_C_idx_list)
+        except Exception as e:
+                logger.error(f'Fail to read high error carbon data for molecule {rdmol.id} from atom index, predicted shift and shift error lists')
+                raise e
+        
+    elif rdmol.filetype == "rdmol":
+        try:
+            high_error_carbons, shift_high_error_carbons, shift_error_high_error_carbons = high_error_carbons_read_rdmol(rdmol.rdmol, rdmol.id)
+        except Exception as e:
+            logger.error(f'Fail to read high error carbon data for molecule {rdmol.id} from rdkit molecule object')
             raise e
+        
+    # Raise error if the file type is not among the above and no external high error carbon data is provided
+    else:
+        logger.error(f'File {rdmol.id} with file type {rdmol.filetype} is not supported for reading high error carbon data')
+        raise ValueError(f'File {rdmol.id} with file type {rdmol.filetype} is not supported for reading high error carbon data')
     
     rdmol.atom_properties["high_error_carbons"] = high_error_carbons
     rdmol.atom_properties["shift_high_error_carbons"] = shift_high_error_carbons

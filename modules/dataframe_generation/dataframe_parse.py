@@ -17,14 +17,25 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
     conns = []
     atom_props = []
     smiles = []
-    for propname in ems_list[0].atom_properties.keys():
-        atom_props.append([])
+    high_error_carbon_shift = []
+    high_error_carbon_shift_error = []
+
+    high_error_carbons_propnames = {"high_error_carbons", "shift_high_error_carbons", "shift_error_high_error_carbons"}
+    other_props = [propname for propname in ems_list[0].atom_properties.keys() if propname not in high_error_carbons_propnames]
+    has_high_error_carbons = high_error_carbons_propnames.issubset(ems_list[0].atom_properties.keys())
+    atom_props = [[] for _ in other_props]
 
     pbar = tqdm(ems_list, desc="Constructing atom dictionary", leave=False)
 
     m = -1
     for ems in pbar:
         m += 1
+
+        # get lookup dictionaries for predicted shift and shift error of high atoms carbons if atom_proprties["high_error_carbons"] exists
+        if has_high_error_carbons:
+            shift_C_lookup = dict(zip(ems.atom_properties["high_error_carbons"], ems.atom_properties["shift_high_error_carbons"]))
+            shift_error_C_lookup = dict(zip(ems.atom_properties["high_error_carbons"], ems.atom_properties["shift_error_high_error_carbons"]))
+
         # Add atom values to lists
         for t, type in enumerate(ems.type):
             molecule_name.append(ems.id)
@@ -36,8 +47,13 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
             z.append(ems.xyz[t][2])
             conns.append(ems.conn[t])
             smiles.append(ems.mol_properties["SMILES"])
-            for p, prop in enumerate(ems.atom_properties.keys()):
+            for p, prop in enumerate(other_props):
                 atom_props[p].append(ems.atom_properties[prop][t])
+
+            # Add predicted shift and shift error for high error carbons if atom_proprties["high_error_carbons"] exists
+            if has_high_error_carbons:
+                high_error_carbon_shift.append(shift_C_lookup.get(t, 0.0))
+                high_error_carbon_shift_error.append(shift_error_C_lookup.get(t, 0.0))
 
             # for p, prop in enumerate(ems.atom_properties.keys()):
             #     if prop == 'shift' and atom_list == 'all':
@@ -62,25 +78,34 @@ def make_atoms_df(ems_list, write=False, format="pickle"):
         "conn": conns,
         "SMILES": smiles,
     }
-    for p, propname in enumerate(ems.atom_properties.keys()):
+
+    if has_high_error_carbons:
+        atoms["high_error_carbon_shift"] = high_error_carbon_shift
+        atoms["high_error_carbon_shift_error"] = high_error_carbon_shift_error
+
+    for p, propname in enumerate(other_props):
         atoms[propname] = atom_props[p]
 
     atoms = pd.DataFrame(atoms)
 
     pbar.close()
 
-    atoms.astype(
-        {
-            "molecule_name": "category",
-            "atom_index": "Int16",
-            "typestr": "category",
-            "typeint": "Int8",
-            "x": "Float32",
-            "y": "Float32",
-            "z": "Float32",
-            "SMILES": "category",
-        }
-    )
+    dtype_map = {
+        "molecule_name": "category",
+        "atom_index": "Int16",
+        "typestr": "category",
+        "typeint": "Int8",
+        "x": "Float32",
+        "y": "Float32",
+        "z": "Float32",
+        "SMILES": "category",
+    }
+
+    if has_high_error_carbons:
+        dtype_map["high_error_carbon_shift"] = "Float32"
+        dtype_map["high_error_carbon_shift_error"] = "Float32"
+
+    atoms = atoms.astype(dtype_map)
 
     if write:
         if format == "csv":

@@ -32,3 +32,44 @@ def high_error_carbons_read_list(C_index_list, shift_C_idx_list, shift_error_C_i
         raise ValueError(f"Shift error array for high error carbons should be one-dimensional!")
 
     return high_error_carbons, shift_C_indices, shift_error_C_indices
+
+def high_error_carbons_read_rdmol(rdmol, mol_id):
+    '''
+    This function is used to read high error carbon data from an RDKit molecule object.
+
+    Args:
+    - rdmol (rdkit.Chem.rdchem.Mol): RDKit molecule object.
+    - mol_id (str): Molecule ID.
+    '''
+
+    # Get all the properties of the RDKit molecule object
+    prop_dict = rdmol.GetPropsAsDict()
+
+    # Get the high error carbon data (HIGH_ERROR_CARBONS) from the atom properties
+    try:
+        high_error_carbons = prop_dict['HIGH_ERROR_CARBONS']
+    except Exception as e:
+        logger.error(f'No high error carbon data found for molecule {mol_id}')
+        raise ValueError(f'No high error carbon data found for molecule {mol_id}')
+    
+    # Split the high error carbon data block into lines and then into items
+    high_error_carbons_items = []
+    for line in high_error_carbons.split('\n'):
+        if line:
+            high_error_carbons_items.append(line.split())    
+
+    # Initialize arrays for saving high error carbon data
+    num_atom = len(high_error_carbons_items)
+    high_error_carbons_array = np.zeros(num_atom, dtype=np.int32)
+    shift_C_indices = np.zeros(num_atom, dtype=np.float64)
+    shift_error_C_indices = np.zeros(num_atom, dtype=np.float64)
+
+    # Read the high error carbon data from the lines
+    # high error carbon block row looks like this
+    #  1    , 66.75623322    , 14.11889649
+    for i, item in enumerate(high_error_carbons_items):
+        high_error_carbons_array[i] = int(item[0])
+        shift_C_indices[i] = float(item[2])
+        shift_error_C_indices[i] = float(item[4])
+    
+    return high_error_carbons_array, shift_C_indices, shift_error_C_indices
