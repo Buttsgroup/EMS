@@ -9,6 +9,8 @@ import random
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+import tempfile
+
 
 ########### Set up the logger system ###########
 logger = logging.getLogger(__name__)
@@ -193,10 +195,10 @@ def rdmol_to_sdf_block(rdmol, FileInfo=None, FileComment=None, SDFversion="V3000
     else:
         FileComment = FileComment.strip()
 
-    # Set the name of the temporary SDF file to save the RDKit molecule
-    characters = string.ascii_letters + string.digits  
-    random_string = ''.join(random.choices(characters, k=30))
-    tmp_file = f"tmp_{random_string}.sdf"    
+    # Set the name of the temporary SDF file to save the RDKit molecule   
+    # characters = string.ascii_letters + string.digits  
+    # random_string = ''.join(random.choices(characters, k=30))
+    # tmp_file = f"tmp_{random_string}.sdf"    
 
     # Set the SDF file version according to the atom number of the RDKit molecule
     atom_num = rdmol.GetNumAtoms()
@@ -209,23 +211,30 @@ def rdmol_to_sdf_block(rdmol, FileInfo=None, FileComment=None, SDFversion="V3000
         logger.warning(f"SDF version {SDFversion} is not supported. SDF version is set to V3000.")
         SDFversion = "V3000"
 
+    # Create a guaranteed-unique temp file (unique per-process, per-call, atomic creation)
+    fd, tmp_file = tempfile.mkstemp(suffix=".sdf")
+    os.close(fd)  # SDWriter will reopen/overwrite it
+
     # Write the molecule to the sdf block with the specified SDF version
-    with Chem.SDWriter(tmp_file) as writer:
-        if SDFversion == "V3000":
-            writer.SetForceV3000(True)
-        elif SDFversion == "V2000":
-            writer.SetForceV3000(False)
-        else:
-            logger.error(f"Invalid SDF version: {SDFversion}")
-            raise ValueError(f"Invalid SDF version: {SDFversion}")
-        writer.write(rdmol)
+    try:
+        with Chem.SDWriter(tmp_file) as writer:
+            if SDFversion == "V3000":
+                writer.SetForceV3000(True)
+            elif SDFversion == "V2000":
+                writer.SetForceV3000(False)
+            else:
+                logger.error(f"Invalid SDF version: {SDFversion}")
+                raise ValueError(f"Invalid SDF version: {SDFversion}")
+            writer.write(rdmol)
     
-    # Read the sdf block from the temporary sdf file and set the _MolFileInfo and _MolFileComments properties
-    with open(tmp_file, 'r') as f:
-        lines = f.readlines()
-        lines[1] = FileInfo + '\n'
-        lines[2] = FileComment + '\n'
-    os.remove(tmp_file)
+        # Read the sdf block from the temporary sdf file and set the _MolFileInfo and _MolFileComments properties
+        with open(tmp_file, 'r') as f:
+            lines = f.readlines()
+            lines[1] = FileInfo + '\n'
+            lines[2] = FileComment + '\n'
+            
+    finally:
+        os.remove(tmp_file)
     
     # Return the sdf block
     return ''.join(lines)
