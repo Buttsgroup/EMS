@@ -7,9 +7,9 @@ import contextlib
 import shutil
 import copy
 
-from xtb_ase import XTBProfile, _io
-import ase
-from ase.io import read
+# from xtb_ase import XTBProfile, _io
+# import ase
+# from ase.io import read
 
 from rdkit.Geometry import Point3D
 
