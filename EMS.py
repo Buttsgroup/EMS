@@ -22,8 +22,7 @@ from EMS.modules.conformer.EMSconf import EMSconf
 from rdkit import Chem
 from rdkit.Chem import rdmolops
 from rdkit.Chem import rdmolfiles
-from ccdc.molecule import Molecule
-from ccdc.descriptors import MolecularDescriptors
+
 
 
 ########### Set up the logger system ###########
@@ -350,12 +349,15 @@ class EMS(object):
         """
         try:
             if self.filetype == 'cif':
+                from ccdc.descriptors import MolecularDescriptors
+
                 atoms = list(self.csdmol.atoms)
                 n = len(atoms)
 
                 # Graph Distance
                 graph_dist = np.zeros((n, n), dtype=int)
                 dist_3d = np.zeros((n,n), dtype=float)
+
                 for i, a1 in enumerate(atoms):
                     for j, a2 in enumerate(atoms):
                         if i == j:
@@ -366,7 +368,7 @@ class EMS(object):
                             dist_3d[i, j] = MolecularDescriptors.atom_distance(a1, a2)
 
                 return graph_dist, dist_3d
-            elif self.filetype != "cif":
+            else:
                 graph_dist = Chem.GetDistanceMatrix(self.rdmol).astype(int)
                 dist_3d = Chem.Get3DDistanceMatrix(self.rdmol)
             
